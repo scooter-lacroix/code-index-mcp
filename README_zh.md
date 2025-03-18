@@ -33,15 +33,6 @@ Code Index MCP 是一個基於 Model Context Protocol 的服務器，允許大�
 
 ## 使用方法
 
-### 直接運行服務器
-
-```bash
-# 使用 uv 直接運行 - 無需額外安裝依賴
-uv run run.py
-```
-
-UV 會根據專案配置自動處理所有依賴安裝。
-
 ### 與 Claude Desktop 整合
 
 您可以輕鬆地將 Code Index MCP 與 Claude Desktop 整合:
@@ -51,10 +42,10 @@ UV 會根據專案配置自動處理所有依賴安裝。
 
    - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
    - macOS/Linux: `~/Library/Application Support/Claude/claude_desktop_config.json`
-
 3. 添加以下配置 (請替換為您的實際路徑):
 
    **適用於 Windows**:
+
    ```json
    {
      "mcpServers": {
@@ -72,6 +63,7 @@ UV 會根據專案配置自動處理所有依賴安裝。
    ```
 
    **適用於 macOS/Linux**:
+
    ```json
    {
      "mcpServers": {
@@ -89,7 +81,6 @@ UV 會根據專案配置自動處理所有依賴安裝。
    ```
 
    **注意**: `--directory` 選項非常重要，它確保 uv 在正確的項目目錄中運行，並可以正確載入所有依賴項。
-
 4. 重啟 Claude Desktop，就可以使用 Code Indexer 來分析代碼專案
 
 無需手動安裝依賴 - UV 在運行服務器時會自動處理所有依賴。

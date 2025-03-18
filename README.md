@@ -17,14 +17,15 @@ This project uses uv for environment management and dependency installation.
 
 1. Ensure you have Python 3.10 or later installed
 2. Install uv (recommended):
+
    ```bash
    # Windows
    powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
    # macOS/Linux
    curl -LsSf https://astral.sh/uv/install.sh | sh
    ```
-
 3. Getting the code:
+
    ```bash
    # Clone the repository
    git clone https://github.com/your-username/code-index-mcp.git
@@ -46,14 +47,14 @@ UV will automatically handle all dependency installations based on the project's
 You can easily integrate Code Index MCP with Claude Desktop:
 
 1. Ensure you have UV installed (see installation section above)
-
 2. Find or create the Claude Desktop configuration file:
+
    - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
    - macOS/Linux: `~/Library/Application Support/Claude/claude_desktop_config.json`
-
 3. Add the following configuration (replace with your actual path):
 
    **For Windows**:
+
    ```json
    {
      "mcpServers": {
@@ -71,6 +72,7 @@ You can easily integrate Code Index MCP with Claude Desktop:
    ```
 
    **For macOS/Linux**:
+
    ```json
    {
      "mcpServers": {
@@ -88,7 +90,6 @@ You can easily integrate Code Index MCP with Claude Desktop:
    ```
 
    **Note**: The `--directory` option is important as it ensures uv runs in the correct project directory and can properly load all dependencies.
-
 4. Restart Claude Desktop to use Code Indexer for analyzing code projects
 
 No manual dependency installation is required - UV will automatically handle all dependencies when running the server.
@@ -96,19 +97,20 @@ No manual dependency installation is required - UV will automatically handle all
 ### Basic Workflow
 
 1. **Set Project Path** (required first step):
+
    - When using for the first time, you must set the project path to analyze
    - Through Claude command: "I need to analyze a project, help me set up the project path"
    - Provide the complete project directory path
-
 2. **Code Search**:
+
    - Search for specific keywords or patterns: "Search for 'function name' in the project"
    - Filter by file type: "Search for 'import' in all .py files"
-
 3. **File Analysis**:
+
    - Analyze specific files: "Analyze the file src/main.py"
    - Get file summaries: "Give me a list of functions in utils/helpers.js"
-
 4. **Project Navigation**:
+
    - View project structure: "Show me the structure of this project"
    - Find files matching specific patterns: "Find all test_*.py files"
 
@@ -117,6 +119,7 @@ No manual dependency installation is required - UV will automatically handle all
 ### Persistent Storage
 
 All index and settings data are stored in the `.code_indexer` folder within the project directory:
+
 - `config.json`: Project configuration information
 - `file_index.pickle`: File index data
 - `content_cache.pickle`: File content cache
@@ -126,6 +129,7 @@ This ensures that the entire project doesn't need to be re-indexed each time it'
 ### Dependency Management with UV
 
 Code Index MCP uses UV for dependency management, which provides several advantages:
+
 - Automatic dependency resolution based on project requirements
 - Faster package installation and environment setup
 - Consistent dependency versions via the lock file
@@ -133,6 +137,7 @@ Code Index MCP uses UV for dependency management, which provides several advanta
 ### Supported File Types
 
 The following file types are currently supported for indexing and analysis:
+
 - Python (.py)
 - JavaScript/TypeScript (.js, .ts, .jsx, .tsx)
 - Java (.java)
