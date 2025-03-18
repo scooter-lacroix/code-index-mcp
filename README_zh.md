@@ -24,31 +24,28 @@ Code Index MCP 是一個基於 Model Context Protocol 的服務器，允許大�
    curl -LsSf https://astral.sh/uv/install.sh | sh
    ```
 
-3. 設置環境並安裝依賴:
+3. 獲取代碼:
    ```bash
-   # 創建虛擬環境和安裝依賴
-   uv venv
-   uv pip install -r requirements.txt
+   # 克隆儲存庫
+   git clone https://github.com/your-username/code-index-mcp.git
    ```
 
 ## 使用方法
 
-### 運行服務器
+### 直接運行服務器
 
 ```bash
-# 使用虛擬環境中的 Python 執行
-.venv/Scripts/python server.py  # Windows
-.venv/bin/python server.py     # macOS/Linux
-
-# 或使用 uv 更簡便地執行
-uv run server.py
+# 使用 uv 直接運行 - 無需額外安裝依賴
+uv run run.py
 ```
+
+UV 會根據專案配置自動處理所有依賴安裝。
 
 ### 與 Claude Desktop 整合
 
-您可以手動配置 Claude Desktop 使其與 Code Index MCP 整合:
+您可以輕鬆地將 Code Index MCP 與 Claude Desktop 整合:
 
-1. 確保已按上述步驟完成環境安裝
+1. 確保已安裝 UV (參見上方安裝部分)
 
 2. 找到或創建 Claude Desktop 配置文件:
    - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
@@ -60,13 +57,15 @@ uv run server.py
      "mcpServers": {
        "code-indexer": {
          "command": "uv",
-         "args": ["run", "C:/path/to/your/code-index-mcp/server.py"]
+         "args": ["run", "/完整/路徑/到/code-index-mcp/run.py"]
        }
      }
    }
    ```
 
 4. 重啟 Claude Desktop，就可以使用 Code Indexer 來分析代碼專案
+
+無需手動安裝依賴 - UV 在運行服務器時會自動處理所有依賴。
 
 ### 基本使用流程
 
@@ -98,6 +97,13 @@ uv run server.py
 
 這確保了不需要在每次使用時重新索引整個專案。
 
+### 使用 UV 進行依賴管理
+
+Code Index MCP 使用 UV 進行依賴管理，這提供了多項優勢：
+- 根據專案需求自動解析依賴關係
+- 更快的套件安裝和環境設置
+- 通過鎖定文件確保依賴版本的一致性
+
 ### 支持的文件類型
 
 目前支持以下文件類型的索引和分析:
@@ -125,6 +131,7 @@ uv run server.py
 - 檔案路徑驗證防止目錄遍歷攻擊
 - 不允許透過絕對路徑存取文件
 - 專案路徑必須明確設定，無預設值
+- `.code_indexer` 資料夾包含 `.gitignore` 文件，防止索引數據被提交
 
 ## 貢獻
 

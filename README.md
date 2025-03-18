@@ -24,31 +24,28 @@ This project uses uv for environment management and dependency installation.
    curl -LsSf https://astral.sh/uv/install.sh | sh
    ```
 
-3. Set up the environment and install dependencies:
+3. Getting the code:
    ```bash
-   # Create virtual environment and install dependencies
-   uv venv
-   uv pip install -r requirements.txt
+   # Clone the repository
+   git clone https://github.com/your-username/code-index-mcp.git
    ```
 
 ## Usage
 
-### Running the Server
+### Running the Server Directly
 
 ```bash
-# Using Python from the virtual environment
-.venv/Scripts/python server.py  # Windows
-.venv/bin/python server.py     # macOS/Linux
-
-# Or more conveniently with uv
-uv run server.py
+# Run directly with uv - no additional dependency installation needed
+uv run run.py
 ```
+
+UV will automatically handle all dependency installations based on the project's configuration.
 
 ### Integrating with Claude Desktop
 
-You can manually configure Claude Desktop to integrate with Code Index MCP:
+You can easily integrate Code Index MCP with Claude Desktop:
 
-1. Ensure you have completed the environment setup as described above
+1. Ensure you have UV installed (see installation section above)
 
 2. Find or create the Claude Desktop configuration file:
    - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
@@ -60,13 +57,15 @@ You can manually configure Claude Desktop to integrate with Code Index MCP:
      "mcpServers": {
        "code-indexer": {
          "command": "uv",
-         "args": ["run", "C:/path/to/your/code-index-mcp/server.py"]
+         "args": ["run", "/full/path/to/code-index-mcp/run.py"]
        }
      }
    }
    ```
 
 4. Restart Claude Desktop to use Code Indexer for analyzing code projects
+
+No manual dependency installation is required - UV will automatically handle all dependencies when running the server.
 
 ### Basic Workflow
 
@@ -98,6 +97,13 @@ All index and settings data are stored in the `.code_indexer` folder within the 
 
 This ensures that the entire project doesn't need to be re-indexed each time it's used.
 
+### Dependency Management with UV
+
+Code Index MCP uses UV for dependency management, which provides several advantages:
+- Automatic dependency resolution based on project requirements
+- Faster package installation and environment setup
+- Consistent dependency versions via the lock file
+
 ### Supported File Types
 
 The following file types are currently supported for indexing and analysis:
@@ -125,6 +131,7 @@ The following file types are currently supported for indexing and analysis:
 - File path validation prevents directory traversal attacks
 - Absolute path access is not allowed
 - Project path must be explicitly set, with no default value
+- The `.code_indexer` folder includes a `.gitignore` file to prevent indexing data from being committed
 
 ## Contributing
 
