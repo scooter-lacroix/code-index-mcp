@@ -49,19 +49,45 @@ You can easily integrate Code Index MCP with Claude Desktop:
 
 2. Find or create the Claude Desktop configuration file:
    - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
-   - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+   - macOS/Linux: `~/Library/Application Support/Claude/claude_desktop_config.json`
 
 3. Add the following configuration (replace with your actual path):
+
+   **For Windows**:
    ```json
    {
      "mcpServers": {
        "code-indexer": {
          "command": "uv",
-         "args": ["run", "/full/path/to/code-index-mcp/run.py"]
+         "args": [
+            "--directory",
+            "C:\\Users\\username\\path\\to\\code-index-mcp",
+            "run",
+            "run.py"
+          ]
        }
      }
    }
    ```
+
+   **For macOS/Linux**:
+   ```json
+   {
+     "mcpServers": {
+       "code-indexer": {
+         "command": "uv",
+         "args": [
+            "--directory",
+            "/home/username/path/to/code-index-mcp",
+            "run",
+            "run.py"
+          ]
+       }
+     }
+   }
+   ```
+
+   **Note**: The `--directory` option is important as it ensures uv runs in the correct project directory and can properly load all dependencies.
 
 4. Restart Claude Desktop to use Code Indexer for analyzing code projects
 

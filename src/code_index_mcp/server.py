@@ -11,11 +11,12 @@ import os
 import pathlib
 import json
 import fnmatch
+import sys
 from mcp.server.fastmcp import FastMCP, Context, Image
 from mcp import types
 
-# Import the ProjectSettings class
-from code_index_mcp.project_settings import ProjectSettings
+# Import the ProjectSettings class - using relative import
+from .project_settings import ProjectSettings
 
 # Create the MCP server
 mcp = FastMCP("CodeIndexer", dependencies=["pathlib"])
@@ -667,6 +668,7 @@ def _get_all_files(directory: Dict, prefix: str = "") -> List[Tuple[str, Dict]]:
 
 def main():
     """Entry point for the code indexer."""
+    print("Starting Code Index MCP Server...", file=sys.stderr)
     mcp.run()
 
 if __name__ == "__main__":
