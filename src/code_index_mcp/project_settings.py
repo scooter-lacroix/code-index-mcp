@@ -32,10 +32,10 @@ class ProjectSettings:
         """確保設定目錄存在"""
         if not os.path.exists(self.settings_path):
             os.makedirs(self.settings_path)
-            # 創建一個 .gitignore 文件，使設定目錄不被 git 追蹤
-            gitignore_path = os.path.join(self.settings_path, ".gitignore")
-            with open(gitignore_path, 'w') as f:
-                f.write("# Ignore everything in this directory\n*\n# Except this file\n!.gitignore\n")
+            # 創建一個 README.md 文件，說明該目錄的用途
+            readme_path = os.path.join(self.settings_path, "README.md")
+            with open(readme_path, 'w') as f:
+                f.write("# Code Indexer Cache Directory\n\nThis directory contains cached data for the Code Index MCP tool:\n\n- `config.json`: Project configuration\n- `file_index.pickle`: Index of project files\n- `content_cache.pickle`: Cached file contents\n\nThese files are automatically generated and should not be committed to version control.\n")
     
     def get_config_path(self):
         """獲取配置文件的路徑"""

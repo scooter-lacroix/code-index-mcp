@@ -223,6 +223,29 @@ def set_project_path(path: str, ctx: Context) -> str:
         # Create a new settings manager for the new path
         ctx.request_context.lifespan_context.settings = ProjectSettings(abs_path)
         
+        # Ensure .code_indexer is added to project's .gitignore
+        gitignore_path = os.path.join(abs_path, ".gitignore")
+        try:
+            # Check if .gitignore exists
+            if os.path.exists(gitignore_path):
+                # Read existing content
+                with open(gitignore_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                
+                # Check if .code_indexer is already in .gitignore
+                if ".code_indexer/" not in content and ".code_indexer" not in content:
+                    # Append to .gitignore
+                    with open(gitignore_path, 'a', encoding='utf-8') as f:
+                        f.write("\n# Code Index MCP cache directory\n.code_indexer/\n")
+                    ctx.info(f"Added .code_indexer/ to project's .gitignore file.")
+            else:
+                # Create new .gitignore
+                with open(gitignore_path, 'w', encoding='utf-8') as f:
+                    f.write("# Code Index MCP cache directory\n.code_indexer/\n")
+                ctx.info(f"Created .gitignore file with .code_indexer/ entry.")
+        except Exception as gitignore_error:
+            ctx.info(f"Note: Could not update .gitignore file: {gitignore_error}")
+        
         # Try to load existing index and cache
         loaded_index = ctx.request_context.lifespan_context.settings.load_index()
         if loaded_index:

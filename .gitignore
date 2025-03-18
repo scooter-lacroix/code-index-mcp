@@ -34,3 +34,6 @@ ENV/
 # OS specific files
 .DS_Store
 Thumbs.db
+
+# Code Index MCP specific files
+.code_indexer/
