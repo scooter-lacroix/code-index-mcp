@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "code-index-mcp"
+version = "0.1.0"
+description = "Code indexing and analysis tools for LLMs using MCP"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Your Name", email = "your.email@example.com"}
+]
+dependencies = [
+    "mcp>=0.3.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/code-index-mcp"
+"Bug Tracker" = "https://github.com/yourusername/code-index-mcp/issues"
+
+[project.scripts]
+code-indexer = "code_index_mcp.server:main"
+uvx = "code_index_mcp.server:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}

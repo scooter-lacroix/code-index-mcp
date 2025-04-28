@@ -77,12 +77,9 @@ You can easily integrate Code Index MCP with Claude Desktop:
    {
      "mcpServers": {
        "code-indexer": {
-         "command": "uv",
+         "command": "uvx",
          "args": [
-            "--directory",
-            "C:\\Users\\username\\path\\to\\code-index-mcp",
-            "run",
-            "run.py"
+            "C:\\Users\\username\\path\\to\\code-index-mcp"
           ]
        }
      }
@@ -95,19 +92,16 @@ You can easily integrate Code Index MCP with Claude Desktop:
    {
      "mcpServers": {
        "code-indexer": {
-         "command": "uv",
+         "command": "uvx",
          "args": [
-            "--directory",
-            "/home/username/path/to/code-index-mcp",
-            "run",
-            "run.py"
+            "/Users/username/path/to/code-index-mcp"
           ]
        }
      }
    }
    ```
 
-   **Note**: The `--directory` option is important as it ensures uv runs in the correct project directory and can properly load all dependencies.
+   **Note**: The tool can also be run directly with `uv run run.py` which may be useful for development and debugging.
 
 #### Option 2: Using Docker (Containerized)
 
