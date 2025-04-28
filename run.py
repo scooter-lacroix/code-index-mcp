@@ -6,13 +6,13 @@ import sys
 import os
 import traceback
 
-# 將 src 目錄添加到路徑
+# Add src directory to path
 src_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src')
 sys.path.insert(0, src_path)
 
 try:
     from code_index_mcp.server import main
-    
+
     if __name__ == "__main__":
         print("Starting Code Index MCP server...", file=sys.stderr)
         print(f"Added path: {src_path}", file=sys.stderr)

@@ -13,7 +13,7 @@ import hashlib
 from datetime import datetime
 
 class ProjectSettings:
-    """管理專案設定和索引資料的類"""
+    """Class for managing project settings and index data"""
 
     SETTINGS_DIR = "code_indexer"
     CONFIG_FILE = "config.json"
@@ -21,35 +21,35 @@ class ProjectSettings:
     CACHE_FILE = "content_cache.pickle"
 
     def __init__(self, base_path, skip_load=False):
-        """初始化專案設定
+        """Initialize project settings
 
         Args:
-            base_path (str): 專案的基本路徑
-            skip_load (bool): 是否跳過加載文件
+            base_path (str): Base path of the project
+            skip_load (bool): Whether to skip loading files
         """
         self.base_path = base_path
         self.skip_load = skip_load
 
-        # 確保臨時目錄的基本路徑存在
+        # Ensure the base path of the temporary directory exists
         try:
-            # 獲取系統臨時目錄
+            # Get system temporary directory
             system_temp = tempfile.gettempdir()
             print(f"System temporary directory: {system_temp}")
 
-            # 檢查系統臨時目錄是否存在且可寫
+            # Check if the system temporary directory exists and is writable
             if not os.path.exists(system_temp):
                 print(f"Warning: System temporary directory does not exist: {system_temp}")
-                # 嘗試使用當前目錄作為備用
+                # Try using current directory as fallback
                 system_temp = os.getcwd()
                 print(f"Using current directory as fallback: {system_temp}")
 
             if not os.access(system_temp, os.W_OK):
                 print(f"Warning: No write access to system temporary directory: {system_temp}")
-                # 嘗試使用當前目錄作為備用
+                # Try using current directory as fallback
                 system_temp = os.getcwd()
                 print(f"Using current directory as fallback: {system_temp}")
 
-            # 創建 code_indexer 目錄
+            # Create code_indexer directory
             temp_base_dir = os.path.join(system_temp, self.SETTINGS_DIR)
             print(f"Code indexer directory path: {temp_base_dir}")
 
@@ -57,7 +57,7 @@ class ProjectSettings:
                 print(f"Creating code indexer directory: {temp_base_dir}")
                 os.makedirs(temp_base_dir, exist_ok=True)
 
-                # 創建一個 README.md 文件，說明該目錄的用途
+                # Create a README.md file explaining the purpose of this directory
                 readme_path = os.path.join(temp_base_dir, "README.md")
                 with open(readme_path, 'w', encoding='utf-8') as f:
                     f.write("# Code Indexer Cache Directory\n\nThis directory contains cached data for the Code Index MCP tool.\nEach subdirectory corresponds to a different project.\n")
@@ -66,28 +66,28 @@ class ProjectSettings:
                 print(f"Code indexer directory already exists: {temp_base_dir}")
         except Exception as e:
             print(f"Error setting up temporary directory: {e}")
-            # 如果無法創建臨時目錄，使用當前目錄下的 .code_indexer 作為備用
+            # If unable to create temporary directory, use .code_indexer in current directory
             temp_base_dir = os.path.join(os.getcwd(), ".code_indexer")
             print(f"Using fallback directory: {temp_base_dir}")
             if not os.path.exists(temp_base_dir):
                 os.makedirs(temp_base_dir, exist_ok=True)
 
-        # 使用系統臨時目錄存儲索引數據
+        # Use system temporary directory to store index data
         try:
             if base_path:
-                # 使用專案路徑的哈希值作為唯一標識符
+                # Use hash of project path as unique identifier
                 path_hash = hashlib.md5(base_path.encode()).hexdigest()
                 self.settings_path = os.path.join(temp_base_dir, path_hash)
                 print(f"Using project-specific directory: {self.settings_path}")
             else:
-                # 如果沒有提供基本路徑，使用一個默認目錄
+                # If no base path provided, use a default directory
                 self.settings_path = os.path.join(temp_base_dir, "default")
                 print(f"Using default directory: {self.settings_path}")
 
             self.ensure_settings_dir()
         except Exception as e:
             print(f"Error setting up project settings: {e}")
-            # 如果出現錯誤，使用當前目錄下的 .code_indexer 作為備用
+            # If error occurs, use .code_indexer in current directory as fallback
             fallback_dir = os.path.join(os.getcwd(), ".code_indexer",
                                       "default" if not base_path else hashlib.md5(base_path.encode()).hexdigest())
             print(f"Using fallback directory: {fallback_dir}")
@@ -96,16 +96,16 @@ class ProjectSettings:
                 os.makedirs(fallback_dir, exist_ok=True)
 
     def ensure_settings_dir(self):
-        """確保設定目錄存在"""
+        """Ensure settings directory exists"""
         print(f"Checking project settings directory: {self.settings_path}")
 
         try:
             if not os.path.exists(self.settings_path):
                 print(f"Creating project settings directory: {self.settings_path}")
-                # 創建目錄結構
+                # Create directory structure
                 os.makedirs(self.settings_path, exist_ok=True)
 
-                # 創建一個 README.md 文件，說明該目錄的用途
+                # Create a README.md file explaining the purpose of this directory
                 readme_path = os.path.join(self.settings_path, "README.md")
                 readme_content = (
                     f"# Code Indexer Cache Directory for {self.base_path}\n\n"
@@ -125,10 +125,10 @@ class ProjectSettings:
             else:
                 print(f"Project settings directory already exists: {self.settings_path}")
 
-            # 確認目錄是否可寫
+            # Check if directory is writable
             if not os.access(self.settings_path, os.W_OK):
                 print(f"Warning: No write access to project settings directory: {self.settings_path}")
-                # 如果目錄不可寫，嘗試使用當前目錄下的 .code_indexer 作為備用
+                # If directory is not writable, use .code_indexer in current directory as fallback
                 fallback_dir = os.path.join(os.getcwd(), ".code_indexer",
                                           os.path.basename(self.settings_path))
                 print(f"Using fallback directory: {fallback_dir}")
@@ -137,7 +137,7 @@ class ProjectSettings:
                     os.makedirs(fallback_dir, exist_ok=True)
         except Exception as e:
             print(f"Error ensuring settings directory: {e}")
-            # 如果無法創建設定目錄，使用當前目錄下的 .code_indexer 作為備用
+            # If unable to create settings directory, use .code_indexer in current directory
             fallback_dir = os.path.join(os.getcwd(), ".code_indexer",
                                       "default" if not self.base_path else hashlib.md5(self.base_path.encode()).hexdigest())
             print(f"Using fallback directory: {fallback_dir}")
@@ -146,57 +146,57 @@ class ProjectSettings:
                 os.makedirs(fallback_dir, exist_ok=True)
 
     def get_config_path(self):
-        """獲取配置文件的路徑"""
+        """Get the path to the configuration file"""
         try:
             path = os.path.join(self.settings_path, self.CONFIG_FILE)
-            # 確保目錄存在
+            # Ensure directory exists
             os.makedirs(os.path.dirname(path), exist_ok=True)
             return path
         except Exception as e:
             print(f"Error getting config path: {e}")
-            # 如果出現錯誤，使用當前目錄下的文件作為備用
+            # If error occurs, use file in current directory as fallback
             return os.path.join(os.getcwd(), self.CONFIG_FILE)
 
     def get_index_path(self):
-        """獲取索引文件的路徑"""
+        """Get the path to the index file"""
         try:
             path = os.path.join(self.settings_path, self.INDEX_FILE)
-            # 確保目錄存在
+            # Ensure directory exists
             os.makedirs(os.path.dirname(path), exist_ok=True)
             return path
         except Exception as e:
             print(f"Error getting index path: {e}")
-            # 如果出現錯誤，使用當前目錄下的文件作為備用
+            # If error occurs, use file in current directory as fallback
             return os.path.join(os.getcwd(), self.INDEX_FILE)
 
     def get_cache_path(self):
-        """獲取緩存文件的路徑"""
+        """Get the path to the cache file"""
         try:
             path = os.path.join(self.settings_path, self.CACHE_FILE)
-            # 確保目錄存在
+            # Ensure directory exists
             os.makedirs(os.path.dirname(path), exist_ok=True)
             return path
         except Exception as e:
             print(f"Error getting cache path: {e}")
-            # 如果出現錯誤，使用當前目錄下的文件作為備用
+            # If error occurs, use file in current directory as fallback
             return os.path.join(os.getcwd(), self.CACHE_FILE)
 
     def _get_timestamp(self):
-        """獲取當前時間戳"""
+        """Get current timestamp"""
         return datetime.now().isoformat()
 
     def save_config(self, config):
-        """保存配置數據
+        """Save configuration data
 
         Args:
-            config (dict): 配置數據
+            config (dict): Configuration data
         """
         try:
             config_path = self.get_config_path()
-            # 添加時間戳
+            # Add timestamp
             config['last_updated'] = self._get_timestamp()
 
-            # 確保目錄存在
+            # Ensure directory exists
             os.makedirs(os.path.dirname(config_path), exist_ok=True)
 
             with open(config_path, 'w', encoding='utf-8') as f:
@@ -209,12 +209,12 @@ class ProjectSettings:
             return config
 
     def load_config(self):
-        """加載配置數據
+        """Load configuration data
 
         Returns:
-            dict: 配置數據，如果文件不存在則返回空字典
+            dict: Configuration data, or empty dict if file doesn't exist
         """
-        # 如果設置了跳過加載，直接返回空字典
+        # If skip_load is set, return empty dict directly
         if self.skip_load:
             return {}
 
@@ -228,7 +228,7 @@ class ProjectSettings:
                     return config
                 except (json.JSONDecodeError, UnicodeDecodeError) as e:
                     print(f"Error parsing config file: {e}")
-                    # 如果文件損壞，返回空字典
+                    # If file is corrupted, return empty dict
                     return {}
             else:
                 print(f"Config file does not exist: {config_path}")
@@ -238,25 +238,25 @@ class ProjectSettings:
             return {}
 
     def save_index(self, file_index):
-        """保存文件索引
+        """Save file index
 
         Args:
-            file_index (dict): 文件索引數據
+            file_index (dict): File index data
         """
         try:
             index_path = self.get_index_path()
             print(f"Saving index to: {index_path}")
 
-            # 確保目錄存在
+            # Ensure directory exists
             dir_path = os.path.dirname(index_path)
             if not os.path.exists(dir_path):
                 print(f"Creating directory: {dir_path}")
                 os.makedirs(dir_path, exist_ok=True)
 
-            # 檢查目錄是否可寫
+            # Check if directory is writable
             if not os.access(dir_path, os.W_OK):
                 print(f"Warning: Directory is not writable: {dir_path}")
-                # 使用當前目錄作為備用
+                # Use current directory as fallback
                 index_path = os.path.join(os.getcwd(), self.INDEX_FILE)
                 print(f"Using fallback path: {index_path}")
 
@@ -266,7 +266,7 @@ class ProjectSettings:
             print(f"Index saved successfully to: {index_path}")
         except Exception as e:
             print(f"Error saving index: {e}")
-            # 嘗試保存到當前目錄
+            # Try saving to current directory
             try:
                 fallback_path = os.path.join(os.getcwd(), self.INDEX_FILE)
                 print(f"Trying fallback path: {fallback_path}")
@@ -277,12 +277,12 @@ class ProjectSettings:
                 print(f"Error saving index to fallback path: {e2}")
 
     def load_index(self):
-        """加載文件索引
+        """Load file index
 
         Returns:
-            dict: 文件索引數據，如果文件不存在則返回空字典
+            dict: File index data, or empty dict if file doesn't exist
         """
-        # 如果設置了跳過加載，直接返回空字典
+        # If skip_load is set, return empty dict directly
         if self.skip_load:
             return {}
 
@@ -297,13 +297,13 @@ class ProjectSettings:
                     return index
                 except (pickle.PickleError, EOFError) as e:
                     print(f"Error parsing index file: {e}")
-                    # 如果文件損壞，返回空字典
+                    # If file is corrupted, return empty dict
                     return {}
                 except Exception as e:
                     print(f"Unexpected error loading index: {e}")
                     return {}
             else:
-                # 嘗試從當前目錄加載
+                # Try loading from current directory
                 fallback_path = os.path.join(os.getcwd(), self.INDEX_FILE)
                 if os.path.exists(fallback_path):
                     print(f"Trying fallback path: {fallback_path}")
@@ -321,25 +321,25 @@ class ProjectSettings:
             return {}
 
     def save_cache(self, content_cache):
-        """保存內容緩存
+        """Save content cache
 
         Args:
-            content_cache (dict): 內容緩存數據
+            content_cache (dict): Content cache data
         """
         try:
             cache_path = self.get_cache_path()
             print(f"Saving cache to: {cache_path}")
 
-            # 確保目錄存在
+            # Ensure directory exists
             dir_path = os.path.dirname(cache_path)
             if not os.path.exists(dir_path):
                 print(f"Creating directory: {dir_path}")
                 os.makedirs(dir_path, exist_ok=True)
 
-            # 檢查目錄是否可寫
+            # Check if directory is writable
             if not os.access(dir_path, os.W_OK):
                 print(f"Warning: Directory is not writable: {dir_path}")
-                # 使用當前目錄作為備用
+                # Use current directory as fallback
                 cache_path = os.path.join(os.getcwd(), self.CACHE_FILE)
                 print(f"Using fallback path: {cache_path}")
 
@@ -349,7 +349,7 @@ class ProjectSettings:
             print(f"Cache saved successfully to: {cache_path}")
         except Exception as e:
             print(f"Error saving cache: {e}")
-            # 嘗試保存到當前目錄
+            # Try saving to current directory
             try:
                 fallback_path = os.path.join(os.getcwd(), self.CACHE_FILE)
                 print(f"Trying fallback path: {fallback_path}")
@@ -360,12 +360,12 @@ class ProjectSettings:
                 print(f"Error saving cache to fallback path: {e2}")
 
     def load_cache(self):
-        """加載內容緩存
+        """Load content cache
 
         Returns:
-            dict: 內容緩存數據，如果文件不存在則返回空字典
+            dict: Content cache data, or empty dict if file doesn't exist
         """
-        # 如果設置了跳過加載，直接返回空字典
+        # If skip_load is set, return empty dict directly
         if self.skip_load:
             return {}
 
@@ -380,13 +380,13 @@ class ProjectSettings:
                     return cache
                 except (pickle.PickleError, EOFError) as e:
                     print(f"Error parsing cache file: {e}")
-                    # 如果文件損壞，返回空字典
+                    # If file is corrupted, return empty dict
                     return {}
                 except Exception as e:
                     print(f"Unexpected error loading cache: {e}")
                     return {}
             else:
-                # 嘗試從當前目錄加載
+                # Try loading from current directory
                 fallback_path = os.path.join(os.getcwd(), self.CACHE_FILE)
                 if os.path.exists(fallback_path):
                     print(f"Trying fallback path: {fallback_path}")
@@ -404,17 +404,17 @@ class ProjectSettings:
             return {}
 
     def clear(self):
-        """清除所有設定和緩存文件"""
+        """Clear all settings and cache files"""
         try:
             print(f"Clearing settings directory: {self.settings_path}")
 
             if os.path.exists(self.settings_path):
-                # 檢查目錄是否可寫
+                # Check if directory is writable
                 if not os.access(self.settings_path, os.W_OK):
                     print(f"Warning: Directory is not writable: {self.settings_path}")
                     return
 
-                # 保留 .gitignore 文件
+                # Preserve .gitignore file
                 gitignore_path = os.path.join(self.settings_path, ".gitignore")
                 has_gitignore = os.path.exists(gitignore_path)
                 gitignore_content = None
@@ -427,7 +427,7 @@ class ProjectSettings:
                     except Exception as e:
                         print(f"Error reading .gitignore: {e}")
 
-                # 刪除資料夾中的所有文件
+                # Delete all files in the directory
                 try:
                     for filename in os.listdir(self.settings_path):
                         file_path = os.path.join(self.settings_path, filename)
@@ -443,7 +443,7 @@ class ProjectSettings:
                 except Exception as e:
                     print(f"Error listing directory: {e}")
 
-                # 恢復 .gitignore 文件
+                # Restore .gitignore file
                 if has_gitignore and gitignore_content:
                     try:
                         with open(gitignore_path, 'w', encoding='utf-8') as f:
@@ -459,10 +459,10 @@ class ProjectSettings:
             print(f"Error clearing settings: {e}")
 
     def get_stats(self):
-        """獲取設定目錄的統計信息
+        """Get statistics for the settings directory
 
         Returns:
-            dict: 包含文件大小和更新時間的字典
+            dict: Dictionary containing file sizes and update times
         """
         try:
             print(f"Getting stats for settings directory: {self.settings_path}")
@@ -479,11 +479,11 @@ class ProjectSettings:
 
             if stats['exists'] and stats['is_directory']:
                 try:
-                    # 獲取目錄中的所有文件
+                    # Get all files in the directory
                     all_files = os.listdir(self.settings_path)
                     stats['all_files'] = all_files
 
-                    # 獲取特定文件的詳細信息
+                    # Get details for specific files
                     for filename in [self.CONFIG_FILE, self.INDEX_FILE, self.CACHE_FILE]:
                         file_path = os.path.join(self.settings_path, filename)
                         if os.path.exists(file_path):
@@ -504,7 +504,7 @@ class ProjectSettings:
                 except Exception as e:
                     stats['list_error'] = str(e)
 
-            # 檢查備用路徑
+            # Check fallback path
             fallback_dir = os.path.join(os.getcwd(), ".code_indexer")
             stats['fallback_path'] = fallback_dir
             stats['fallback_exists'] = os.path.exists(fallback_dir)

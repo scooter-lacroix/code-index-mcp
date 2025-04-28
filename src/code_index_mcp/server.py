@@ -41,29 +41,29 @@ class CodeIndexerContext:
 @asynccontextmanager
 async def indexer_lifespan(server: FastMCP) -> AsyncIterator[CodeIndexerContext]:
     """Manage the lifecycle of the Code Indexer MCP server."""
-    # 不設置默認路徑，用戶必須顯式設置項目路徑
+    # Don't set a default path, user must explicitly set project path
     base_path = ""  # Empty string to indicate no path is set
 
     print("Initializing Code Indexer MCP server...")
 
-    # 初始化設置管理器，設置 skip_load=True 以跳過加載文件
+    # Initialize settings manager with skip_load=True to skip loading files
     settings = ProjectSettings(base_path, skip_load=True)
 
-    # 初始化上下文
+    # Initialize context
     context = CodeIndexerContext(
         base_path=base_path,
         settings=settings
     )
 
-    # 初始化全局變量
+    # Initialize global variables
     global file_index, code_content_cache
 
     try:
         print("Server ready. Waiting for user to set project path...")
-        # 將上下文提供給服務器
+        # Provide context to the server
         yield context
     finally:
-        # 只有在設置了項目路徑後才保存索引和緩存
+        # Only save index and cache if project path has been set
         if context.base_path and file_index:
             print(f"Saving index for project: {context.base_path}")
             settings.save_index(file_index)
@@ -198,7 +198,7 @@ def get_settings_stats() -> str:
 @mcp.tool()
 def set_project_path(path: str, ctx: Context) -> str:
     """Set the base project path for indexing."""
-    # 驗證和規範化路徑
+    # Validate and normalize path
     try:
         norm_path = os.path.normpath(path)
         abs_path = os.path.abspath(norm_path)
@@ -217,7 +217,7 @@ def set_project_path(path: str, ctx: Context) -> str:
         # Update the base path in context
         ctx.request_context.lifespan_context.base_path = abs_path
 
-        # Create a new settings manager for the new path (不跳過加載文件)
+        # Create a new settings manager for the new path (don't skip loading files)
         ctx.request_context.lifespan_context.settings = ProjectSettings(abs_path, skip_load=False)
 
         # Ensure .code_indexer is added to project's .gitignore
@@ -247,11 +247,11 @@ def set_project_path(path: str, ctx: Context) -> str:
         settings_path = ctx.request_context.lifespan_context.settings.settings_path
         print(f"Project settings path: {settings_path}")
 
-        # 嘗試加載現有索引和緩存
+        # Try to load existing index and cache
         print(f"Project path set to: {abs_path}")
         print(f"Attempting to load existing index and cache...")
 
-        # 嘗試加載索引
+        # Try to load index
         loaded_index = ctx.request_context.lifespan_context.settings.load_index()
         if loaded_index:
             print(f"Existing index found and loaded successfully")
@@ -259,7 +259,7 @@ def set_project_path(path: str, ctx: Context) -> str:
             file_count = _count_files(file_index)
             ctx.request_context.lifespan_context.file_count = file_count
 
-            # 嘗試加載緩存
+            # Try to load cache
             loaded_cache = ctx.request_context.lifespan_context.settings.load_cache()
             if loaded_cache:
                 print(f"Existing cache found and loaded successfully")
@@ -782,7 +782,7 @@ def main():
     """Entry point for the code indexer."""
     print("Starting Code Index MCP Server...", file=sys.stderr)
 
-    # 確保臨時目錄存在
+    # Ensure temporary directory exists
     temp_dir = os.path.join(tempfile.gettempdir(), "code_indexer")
     print(f"Temporary directory: {temp_dir}")
 
