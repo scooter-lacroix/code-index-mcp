@@ -33,9 +33,36 @@ Code Index MCP 是一個基於 Model Context Protocol 的服務器，允許大�
 
 ## 使用方法
 
+### 直接運行服務器
+
+```bash
+# 使用 uv 直接運行 - 無需額外安裝依賴
+uv run run.py
+```
+
+UV 將根據項目配置自動處理所有依賴安裝。
+
+### 使用 Docker
+
+您也可以將 Code Index MCP 作為容器化工具使用：
+
+```bash
+# 構建 Docker 映像
+docker build -t code-index-mcp .
+
+# 使用容器作為工具來分析您的代碼
+docker run --rm -i code-index-mcp
+```
+
+這種容器化方法非常適合 Claude Desktop，因為 Claude Desktop 將 MCP 伺服器視為按需啟動的進程，而非持久運行的伺服器。Claude Desktop 會在需要時啟動容器，並通過標準輸入輸出（stdio）與之通訊，僅在會話期間保持容器運行。
+
+使用容器化版本時，您需要使用 `set_project_path` 工具顯式設置項目路徑，就像在非容器化版本中一樣。
+
 ### 與 Claude Desktop 整合
 
 您可以輕鬆地將 Code Index MCP 與 Claude Desktop 整合:
+
+#### 選項 1: 使用 UV (直接安裝)
 
 1. 確保已安裝 UV (參見上方安裝部分)
 2. 找到或創建 Claude Desktop 配置文件:
@@ -81,9 +108,34 @@ Code Index MCP 是一個基於 Model Context Protocol 的服務器，允許大�
    ```
 
    **注意**: `--directory` 選項非常重要，它確保 uv 在正確的項目目錄中運行，並可以正確載入所有依賴項。
+
+#### 選項 2: 使用 Docker (容器化)
+
+1. 按照上方 Docker 部分的說明構建 Docker 映像
+2. 找到或創建 Claude Desktop 配置文件 (位置同上)
+3. 添加以下配置:
+
+   ```json
+   {
+     "mcpServers": {
+       "code-indexer": {
+         "command": "docker",
+         "args": [
+            "run",
+            "-i",
+            "--rm",
+            "code-index-mcp"
+          ]
+       }
+     }
+   }
+   ```
+
+   **注意**: 此配置允許 Claude Desktop 按需啟動容器化的 MCP 工具。
+
 4. 重啟 Claude Desktop，就可以使用 Code Indexer 來分析代碼專案
 
-無需手動安裝依賴 - UV 在運行服務器時會自動處理所有依賴。
+Claude Desktop 會在需要時將 MCP 伺服器作為按需進程啟動，通過標準輸入輸出（stdio）與之通訊，並僅在您的會話期間保持其運行。
 
 ### 基本使用流程
 
@@ -109,13 +161,20 @@ Code Index MCP 是一個基於 Model Context Protocol 的服務器，允許大�
 
 ### 持久化存儲
 
-所有索引和設定數據存儲在專案目錄下的 `.code_indexer` 文件夾中:
+所有索引和設定數據存儲在系統臨時目錄中，每個專案有專屬的子資料夾：
 
+- Windows: `%TEMP%\code_indexer\[project_hash]\`
+- Linux/macOS: `/tmp/code_indexer/[project_hash]/`
+
+每個專案的數據包括：
 - `config.json`: 專案配置資訊
 - `file_index.pickle`: 檔案索引數據
 - `content_cache.pickle`: 檔案內容緩存
 
-這確保了不需要在每次使用時重新索引整個專案。
+這種方法確保：
+1. 不同專案的數據分開存儲
+2. 數據在不再需要時由操作系統自動清理
+3. 在容器化環境中，數據存儲在容器的臨時目錄中
 
 ### 使用 UV 進行依賴管理
 
@@ -153,7 +212,8 @@ Code Index MCP 使用 UV 進行依賴管理，這提供了多項優勢：
 - 檔案路徑驗證防止目錄遍歷攻擊
 - 不允許透過絕對路徑存取文件
 - 專案路徑必須明確設定，無預設值
-- `.code_indexer` 資料夾包含 `.gitignore` 文件，防止索引數據被提交
+- 索引數據存儲在系統臨時目錄中，而非專案目錄
+- 每個專案的數據存儲在基於專案路徑哈希值的獨立目錄中
 
 ## 貢獻
 

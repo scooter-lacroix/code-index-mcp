@@ -42,9 +42,27 @@ uv run run.py
 
 UV will automatically handle all dependency installations based on the project's configuration.
 
+### Using Docker
+
+You can also use Code Index MCP as a containerized tool with Docker:
+
+```bash
+# Build the Docker image
+docker build -t code-index-mcp .
+
+# Use the container as a tool to analyze your code
+docker run --rm -i code-index-mcp
+```
+
+This containerized approach works well with Claude Desktop, which treats MCP servers as on-demand processes rather than persistent servers. Claude Desktop will start the container when needed and communicate with it via stdio, keeping it running only for the duration of the session.
+
+When using the containerized version, you'll need to set the project path explicitly using the `set_project_path` tool, just like in the non-containerized version.
+
 ### Integrating with Claude Desktop
 
 You can easily integrate Code Index MCP with Claude Desktop:
+
+#### Option 1: Using UV (Direct Installation)
 
 1. Ensure you have UV installed (see installation section above)
 2. Find or create the Claude Desktop configuration file:
@@ -90,9 +108,34 @@ You can easily integrate Code Index MCP with Claude Desktop:
    ```
 
    **Note**: The `--directory` option is important as it ensures uv runs in the correct project directory and can properly load all dependencies.
+
+#### Option 2: Using Docker (Containerized)
+
+1. Build the Docker image as described in the Docker section above
+2. Find or create the Claude Desktop configuration file (same locations as above)
+3. Add the following configuration:
+
+   ```json
+   {
+     "mcpServers": {
+       "code-indexer": {
+         "command": "docker",
+         "args": [
+            "run",
+            "-i",
+            "--rm",
+            "code-index-mcp"
+          ]
+       }
+     }
+   }
+   ```
+
+   **Note**: This configuration allows Claude Desktop to start the containerized MCP tool on demand.
+
 4. Restart Claude Desktop to use Code Indexer for analyzing code projects
 
-No manual dependency installation is required - UV will automatically handle all dependencies when running the server.
+Claude Desktop will start the MCP server as an on-demand process when needed, communicate with it via stdio, and keep it running only for the duration of your session.
 
 ### Basic Workflow
 
@@ -109,7 +152,7 @@ No manual dependency installation is required - UV will automatically handle all
 
    - Analyze specific files: "Analyze the file src/main.py"
    - Get file summaries: "Give me a list of functions in utils/helpers.js"
-4. **Project Navigation**:
+3. **Project Navigation**:
 
    - View project structure: "Show me the structure of this project"
    - Find files matching specific patterns: "Find all test_*.py files"
@@ -118,13 +161,20 @@ No manual dependency installation is required - UV will automatically handle all
 
 ### Persistent Storage
 
-All index and settings data are stored in the `.code_indexer` folder within the project directory:
+All index and settings data are stored in the system temporary directory, in a subfolder specific to each project:
 
+- Windows: `%TEMP%\code_indexer\[project_hash]\`
+- Linux/macOS: `/tmp/code_indexer/[project_hash]/`
+
+Each project's data includes:
 - `config.json`: Project configuration information
 - `file_index.pickle`: File index data
 - `content_cache.pickle`: File content cache
 
-This ensures that the entire project doesn't need to be re-indexed each time it's used.
+This approach ensures that:
+1. Different projects' data are kept separate
+2. The data is automatically cleaned up by the OS when no longer needed
+3. In containerized environments, the data is stored in the container's temporary directory
 
 ### Dependency Management with UV
 
@@ -162,7 +212,8 @@ The following file types are currently supported for indexing and analysis:
 - File path validation prevents directory traversal attacks
 - Absolute path access is not allowed
 - Project path must be explicitly set, with no default value
-- The `.code_indexer` folder includes a `.gitignore` file to prevent indexing data from being committed
+- Index data is stored in the system temporary directory, not in the project directory
+- Each project's data is stored in a separate directory based on the project path's hash
 
 ## Contributing
 

@@ -12,6 +12,7 @@ import pathlib
 import json
 import fnmatch
 import sys
+import tempfile
 from mcp.server.fastmcp import FastMCP, Context, Image
 from mcp import types
 
@@ -40,39 +41,35 @@ class CodeIndexerContext:
 @asynccontextmanager
 async def indexer_lifespan(server: FastMCP) -> AsyncIterator[CodeIndexerContext]:
     """Manage the lifecycle of the Code Indexer MCP server."""
-    # We will not set a default base_path
-    # The user must explicitly set the project path before using the system
+    # 不設置默認路徑，用戶必須顯式設置項目路徑
     base_path = ""  # Empty string to indicate no path is set
-    
-    # Initialize the settings manager with a temporary path
-    # This will be properly set when the user calls set_project_path
-    settings = ProjectSettings(base_path or os.getcwd())
-    
-    # Initialize the context
+
+    print("Initializing Code Indexer MCP server...")
+
+    # 初始化設置管理器，設置 skip_load=True 以跳過加載文件
+    settings = ProjectSettings(base_path, skip_load=True)
+
+    # 初始化上下文
     context = CodeIndexerContext(
         base_path=base_path,
         settings=settings
     )
-    
-    # Try to load existing index and cache
+
+    # 初始化全局變量
     global file_index, code_content_cache
-    loaded_index = settings.load_index()
-    if loaded_index:
-        file_index = loaded_index
-        context.file_count = _count_files(file_index)
-    
-    loaded_cache = settings.load_cache()
-    if loaded_cache:
-        code_content_cache = loaded_cache
-    
+
     try:
-        # Yield the context to the server
+        print("Server ready. Waiting for user to set project path...")
+        # 將上下文提供給服務器
         yield context
     finally:
-        # Save index and cache on shutdown
-        if file_index:
+        # 只有在設置了項目路徑後才保存索引和緩存
+        if context.base_path and file_index:
+            print(f"Saving index for project: {context.base_path}")
             settings.save_index(file_index)
-        if code_content_cache:
+
+        if context.base_path and code_content_cache:
+            print(f"Saving cache for project: {context.base_path}")
             settings.save_cache(code_content_cache)
 
 # Initialize the server with our lifespan manager
@@ -84,10 +81,10 @@ mcp = FastMCP("CodeIndexer", lifespan=indexer_lifespan)
 def get_config() -> str:
     """Get the current configuration of the Code Indexer."""
     ctx = mcp.get_context()
-    
+
     # Get the base path from context
     base_path = ctx.request_context.lifespan_context.base_path
-    
+
     # Check if base_path is set
     if not base_path:
         return json.dumps({
@@ -95,14 +92,14 @@ def get_config() -> str:
             "message": "Project path not set. Please use set_project_path to set a project directory first.",
             "supported_extensions": supported_extensions
         }, indent=2)
-    
+
     # Get file count
     file_count = ctx.request_context.lifespan_context.file_count
-    
+
     # Get settings stats
     settings = ctx.request_context.lifespan_context.settings
     settings_stats = settings.get_stats()
-    
+
     config = {
         "base_path": base_path,
         "supported_extensions": supported_extensions,
@@ -110,48 +107,48 @@ def get_config() -> str:
         "settings_directory": settings.settings_path,
         "settings_stats": settings_stats
     }
-    
+
     return json.dumps(config, indent=2)
 
 @mcp.resource("files://{file_path}")
 def get_file_content(file_path: str) -> str:
     """Get the content of a specific file."""
     ctx = mcp.get_context()
-    
+
     # Get the base path from context
     base_path = ctx.request_context.lifespan_context.base_path
-    
+
     # Check if base_path is set
     if not base_path:
         return "Error: Project path not set. Please use set_project_path to set a project directory first."
-    
+
     # Handle absolute paths (especially Windows paths starting with drive letters)
     if os.path.isabs(file_path) or (len(file_path) > 1 and file_path[1] == ':'):
         # Absolute paths are not allowed via this endpoint
         return f"Error: Absolute file paths like '{file_path}' are not allowed. Please use paths relative to the project root."
-    
+
     # Normalize the file path
     norm_path = os.path.normpath(file_path)
-    
+
     # Check for path traversal attempts
-    if "..\\" in norm_path or "../" in norm_path or norm_path.startswith(".."): 
+    if "..\\" in norm_path or "../" in norm_path or norm_path.startswith(".."):
         return f"Error: Invalid file path: {file_path} (directory traversal not allowed)"
-    
+
     # Construct the full path and verify it's within the project bounds
     full_path = os.path.join(base_path, norm_path)
     real_full_path = os.path.realpath(full_path)
     real_base_path = os.path.realpath(base_path)
-    
+
     if not real_full_path.startswith(real_base_path):
         return f"Error: Access denied. File path must be within project directory."
-    
+
     try:
         with open(full_path, 'r', encoding='utf-8') as f:
             content = f.read()
-        
+
         # Cache the content for faster retrieval later
         code_content_cache[norm_path] = content
-        
+
         return content
     except UnicodeDecodeError:
         return f"Error: File {file_path} appears to be a binary file or uses unsupported encoding."
@@ -162,17 +159,17 @@ def get_file_content(file_path: str) -> str:
 def get_project_structure() -> str:
     """Get the structure of the project as a JSON tree."""
     ctx = mcp.get_context()
-    
+
     # Get the base path from context
     base_path = ctx.request_context.lifespan_context.base_path
-    
+
     # Check if base_path is set
     if not base_path:
         return json.dumps({
             "status": "not_configured",
             "message": "Project path not set. Please use set_project_path to set a project directory first."
         }, indent=2)
-    
+
     # Check if we need to refresh the index
     if not file_index:
         _index_project(base_path)
@@ -180,20 +177,20 @@ def get_project_structure() -> str:
         ctx.request_context.lifespan_context.file_count = _count_files(file_index)
         # Save updated index
         ctx.request_context.lifespan_context.settings.save_index(file_index)
-    
+
     return json.dumps(file_index, indent=2)
 
 @mcp.resource("settings://stats")
 def get_settings_stats() -> str:
     """Get statistics about the settings directory and files."""
     ctx = mcp.get_context()
-    
+
     # Get settings manager from context
     settings = ctx.request_context.lifespan_context.settings
-    
+
     # Get settings stats
     stats = settings.get_stats()
-    
+
     return json.dumps(stats, indent=2)
 
 # ----- TOOLS -----
@@ -201,28 +198,28 @@ def get_settings_stats() -> str:
 @mcp.tool()
 def set_project_path(path: str, ctx: Context) -> str:
     """Set the base project path for indexing."""
-    # Validate and normalize the path
+    # 驗證和規範化路徑
     try:
         norm_path = os.path.normpath(path)
         abs_path = os.path.abspath(norm_path)
-        
+
         if not os.path.exists(abs_path):
             return f"Error: Path does not exist: {abs_path}"
-        
+
         if not os.path.isdir(abs_path):
             return f"Error: Path is not a directory: {abs_path}"
-        
+
         # Clear existing in-memory index and cache
         global file_index, code_content_cache
         file_index.clear()
         code_content_cache.clear()
-        
+
         # Update the base path in context
         ctx.request_context.lifespan_context.base_path = abs_path
-        
-        # Create a new settings manager for the new path
-        ctx.request_context.lifespan_context.settings = ProjectSettings(abs_path)
-        
+
+        # Create a new settings manager for the new path (不跳過加載文件)
+        ctx.request_context.lifespan_context.settings = ProjectSettings(abs_path, skip_load=False)
+
         # Ensure .code_indexer is added to project's .gitignore
         gitignore_path = os.path.join(abs_path, ".gitignore")
         try:
@@ -231,7 +228,7 @@ def set_project_path(path: str, ctx: Context) -> str:
                 # Read existing content
                 with open(gitignore_path, 'r', encoding='utf-8') as f:
                     content = f.read()
-                
+
                 # Check if .code_indexer is already in .gitignore
                 if ".code_indexer/" not in content and ".code_indexer" not in content:
                     # Append to .gitignore
@@ -245,22 +242,40 @@ def set_project_path(path: str, ctx: Context) -> str:
                 ctx.info(f"Created .gitignore file with .code_indexer/ entry.")
         except Exception as gitignore_error:
             ctx.info(f"Note: Could not update .gitignore file: {gitignore_error}")
-        
-        # Try to load existing index and cache
+
+        # Print the settings path for debugging
+        settings_path = ctx.request_context.lifespan_context.settings.settings_path
+        print(f"Project settings path: {settings_path}")
+
+        # 嘗試加載現有索引和緩存
+        print(f"Project path set to: {abs_path}")
+        print(f"Attempting to load existing index and cache...")
+
+        # 嘗試加載索引
         loaded_index = ctx.request_context.lifespan_context.settings.load_index()
         if loaded_index:
+            print(f"Existing index found and loaded successfully")
             file_index = loaded_index
             file_count = _count_files(file_index)
             ctx.request_context.lifespan_context.file_count = file_count
+
+            # 嘗試加載緩存
+            loaded_cache = ctx.request_context.lifespan_context.settings.load_cache()
+            if loaded_cache:
+                print(f"Existing cache found and loaded successfully")
+                code_content_cache.update(loaded_cache)
+
             return f"Project path set to: {abs_path}. Loaded existing index with {file_count} files."
-        
+        else:
+            print(f"No existing index found, creating new index...")
+
         # If no existing index, create a new one
         file_count = _index_project(abs_path)
         ctx.request_context.lifespan_context.file_count = file_count
-        
+
         # Save the new index
         ctx.request_context.lifespan_context.settings.save_index(file_index)
-        
+
         # Save project config
         config = {
             "base_path": abs_path,
@@ -268,7 +283,7 @@ def set_project_path(path: str, ctx: Context) -> str:
             "last_indexed": ctx.request_context.lifespan_context.settings.load_config().get('last_indexed', None)
         }
         ctx.request_context.lifespan_context.settings.save_config(config)
-        
+
         return f"Project path set to: {abs_path}. Indexed {file_count} files."
     except Exception as e:
         return f"Error setting project path: {e}"
@@ -280,31 +295,31 @@ def search_code(query: str, ctx: Context, extensions: Optional[List[str]] = None
     Returns a dictionary mapping filenames to lists of (line_number, line_content) tuples.
     """
     base_path = ctx.request_context.lifespan_context.base_path
-    
+
     # Check if base_path is set
     if not base_path:
         return {"error": "Project path not set. Please use set_project_path to set a project directory first."}
-    
+
     # Check if we need to index the project
     if not file_index:
         _index_project(base_path)
         ctx.request_context.lifespan_context.file_count = _count_files(file_index)
         ctx.request_context.lifespan_context.settings.save_index(file_index)
-    
+
     results = {}
-    
+
     # Filter by extensions if provided
     if extensions:
         valid_extensions = [ext if ext.startswith('.') else f'.{ext}' for ext in extensions]
     else:
         valid_extensions = supported_extensions
-    
+
     # Process the search
     for file_path, _info in _get_all_files(file_index):
         # Check if the file has a supported extension
         if not any(file_path.endswith(ext) for ext in valid_extensions):
             continue
-        
+
         try:
             # Get file content (from cache if available)
             if file_path in code_content_cache:
@@ -314,21 +329,21 @@ def search_code(query: str, ctx: Context, extensions: Optional[List[str]] = None
                 with open(full_path, 'r', encoding='utf-8') as f:
                     content = f.read()
                 code_content_cache[file_path] = content
-            
+
             # Search for matches
             matches = []
             for i, line in enumerate(content.splitlines(), 1):
                 if (case_sensitive and query in line) or (not case_sensitive and query.lower() in line.lower()):
                     matches.append((i, line.strip()))
-            
+
             if matches:
                 results[file_path] = matches
         except Exception as e:
             ctx.info(f"Error searching file {file_path}: {e}")
-    
+
     # Save the updated cache
     ctx.request_context.lifespan_context.settings.save_cache(code_content_cache)
-    
+
     return results
 
 @mcp.tool()
@@ -338,22 +353,22 @@ def find_files(pattern: str, ctx: Context) -> List[str]:
     Supports glob patterns like *.py or **/*.js.
     """
     base_path = ctx.request_context.lifespan_context.base_path
-    
+
     # Check if base_path is set
     if not base_path:
         return ["Error: Project path not set. Please use set_project_path to set a project directory first."]
-    
+
     # Check if we need to index the project
     if not file_index:
         _index_project(base_path)
         ctx.request_context.lifespan_context.file_count = _count_files(file_index)
         ctx.request_context.lifespan_context.settings.save_index(file_index)
-    
+
     matching_files = []
     for file_path, _info in _get_all_files(file_index):
         if fnmatch.fnmatch(file_path, pattern):
             matching_files.append(file_path)
-    
+
     return matching_files
 
 @mcp.tool()
@@ -366,18 +381,18 @@ def get_file_summary(file_path: str, ctx: Context) -> Dict[str, Any]:
     - Basic complexity metrics
     """
     base_path = ctx.request_context.lifespan_context.base_path
-    
+
     # Check if base_path is set
     if not base_path:
         return {"error": "Project path not set. Please use set_project_path to set a project directory first."}
-    
+
     # Normalize the file path
     norm_path = os.path.normpath(file_path)
     if norm_path.startswith('..'):
         return {"error": f"Invalid file path: {file_path}"}
-    
+
     full_path = os.path.join(base_path, norm_path)
-    
+
     try:
         # Get file content
         if norm_path in code_content_cache:
@@ -388,49 +403,49 @@ def get_file_summary(file_path: str, ctx: Context) -> Dict[str, Any]:
             code_content_cache[norm_path] = content
             # Save the updated cache
             ctx.request_context.lifespan_context.settings.save_cache(code_content_cache)
-        
+
         # Basic file info
         lines = content.splitlines()
         line_count = len(lines)
-        
+
         # File extension for language-specific analysis
         _, ext = os.path.splitext(norm_path)
-        
+
         summary = {
             "file_path": norm_path,
             "line_count": line_count,
             "size_bytes": os.path.getsize(full_path),
             "extension": ext,
         }
-        
+
         # Language-specific analysis
         if ext == '.py':
             # Python analysis
             imports = []
             classes = []
             functions = []
-            
+
             for i, line in enumerate(lines):
                 line = line.strip()
-                
+
                 # Check for imports
                 if line.startswith('import ') or line.startswith('from '):
                     imports.append(line)
-                
+
                 # Check for class definitions
                 if line.startswith('class '):
                     classes.append({
                         "line": i + 1,
                         "name": line.replace('class ', '').split('(')[0].split(':')[0].strip()
                     })
-                
+
                 # Check for function definitions
                 if line.startswith('def '):
                     functions.append({
                         "line": i + 1,
                         "name": line.replace('def ', '').split('(')[0].strip()
                     })
-            
+
             summary.update({
                 "imports": imports,
                 "classes": classes,
@@ -439,20 +454,20 @@ def get_file_summary(file_path: str, ctx: Context) -> Dict[str, Any]:
                 "class_count": len(classes),
                 "function_count": len(functions),
             })
-        
+
         elif ext in ['.js', '.jsx', '.ts', '.tsx']:
             # JavaScript/TypeScript analysis
             imports = []
             classes = []
             functions = []
-            
+
             for i, line in enumerate(lines):
                 line = line.strip()
-                
+
                 # Check for imports
                 if line.startswith('import ') or line.startswith('require('):
                     imports.append(line)
-                
+
                 # Check for class definitions
                 if line.startswith('class ') or 'class ' in line:
                     class_name = ""
@@ -463,14 +478,14 @@ def get_file_summary(file_path: str, ctx: Context) -> Dict[str, Any]:
                         "line": i + 1,
                         "name": class_name
                     })
-                
+
                 # Check for function definitions
                 if 'function ' in line or '=>' in line:
                     functions.append({
                         "line": i + 1,
                         "content": line
                     })
-            
+
             summary.update({
                 "imports": imports,
                 "classes": classes,
@@ -479,7 +494,7 @@ def get_file_summary(file_path: str, ctx: Context) -> Dict[str, Any]:
                 "class_count": len(classes),
                 "function_count": len(functions),
             })
-        
+
         return summary
     except Exception as e:
         return {"error": f"Error analyzing file: {e}"}
@@ -488,77 +503,151 @@ def get_file_summary(file_path: str, ctx: Context) -> Dict[str, Any]:
 def refresh_index(ctx: Context) -> str:
     """Refresh the project index."""
     base_path = ctx.request_context.lifespan_context.base_path
-    
+
     # Check if base_path is set
     if not base_path:
         return "Error: Project path not set. Please use set_project_path to set a project directory first."
-    
+
     # Clear existing index
     global file_index
     file_index.clear()
-    
+
     # Re-index the project
     file_count = _index_project(base_path)
     ctx.request_context.lifespan_context.file_count = file_count
-    
+
     # Save the updated index
     ctx.request_context.lifespan_context.settings.save_index(file_index)
-    
+
     # Update the last indexed timestamp in config
     config = ctx.request_context.lifespan_context.settings.load_config()
     ctx.request_context.lifespan_context.settings.save_config({
         **config,
         'last_indexed': ctx.request_context.lifespan_context.settings._get_timestamp()
     })
-    
+
     return f"Project re-indexed. Found {file_count} files."
 
 @mcp.tool()
 def get_settings_info(ctx: Context) -> Dict[str, Any]:
     """Get information about the project settings."""
     base_path = ctx.request_context.lifespan_context.base_path
-    
+
     # Check if base_path is set
     if not base_path:
+        # Even if base_path is not set, we can still show the temp directory
+        temp_dir = os.path.join(tempfile.gettempdir(), "code_indexer")
         return {
             "status": "not_configured",
-            "message": "Project path not set. Please use set_project_path to set a project directory first."
+            "message": "Project path not set. Please use set_project_path to set a project directory first.",
+            "temp_directory": temp_dir,
+            "temp_directory_exists": os.path.exists(temp_dir)
         }
-    
+
     settings = ctx.request_context.lifespan_context.settings
-    
+
     # Get config
     config = settings.load_config()
-    
+
     # Get stats
     stats = settings.get_stats()
-    
+
+    # Get temp directory
+    temp_dir = os.path.join(tempfile.gettempdir(), "code_indexer")
+
     return {
         "settings_directory": settings.settings_path,
+        "temp_directory": temp_dir,
+        "temp_directory_exists": os.path.exists(temp_dir),
         "config": config,
         "stats": stats,
         "exists": os.path.exists(settings.settings_path)
     }
 
 @mcp.tool()
+def create_temp_directory() -> Dict[str, Any]:
+    """Create the temporary directory used for storing index data."""
+    temp_dir = os.path.join(tempfile.gettempdir(), "code_indexer")
+
+    result = {
+        "temp_directory": temp_dir,
+        "existed_before": os.path.exists(temp_dir),
+    }
+
+    try:
+        # Create the directory if it doesn't exist
+        if not os.path.exists(temp_dir):
+            os.makedirs(temp_dir, exist_ok=True)
+            result["created"] = True
+
+            # Create a README file
+            readme_path = os.path.join(temp_dir, "README.md")
+            with open(readme_path, 'w', encoding='utf-8') as f:
+                f.write("# Code Indexer Cache Directory\n\nThis directory contains cached data for the Code Index MCP tool.\nEach subdirectory corresponds to a different project.\n")
+            result["readme_created"] = True
+        else:
+            result["created"] = False
+
+        result["exists_now"] = os.path.exists(temp_dir)
+        result["is_directory"] = os.path.isdir(temp_dir)
+    except Exception as e:
+        result["error"] = str(e)
+
+    return result
+
+@mcp.tool()
+def check_temp_directory() -> Dict[str, Any]:
+    """Check the temporary directory used for storing index data."""
+    temp_dir = os.path.join(tempfile.gettempdir(), "code_indexer")
+
+    result = {
+        "temp_directory": temp_dir,
+        "exists": os.path.exists(temp_dir),
+        "is_directory": os.path.isdir(temp_dir) if os.path.exists(temp_dir) else False,
+        "temp_root": tempfile.gettempdir(),
+    }
+
+    # If the directory exists, list its contents
+    if result["exists"] and result["is_directory"]:
+        try:
+            contents = os.listdir(temp_dir)
+            result["contents"] = contents
+            result["subdirectories"] = []
+
+            # Check each subdirectory
+            for item in contents:
+                item_path = os.path.join(temp_dir, item)
+                if os.path.isdir(item_path):
+                    subdir_info = {
+                        "name": item,
+                        "path": item_path,
+                        "contents": os.listdir(item_path) if os.path.exists(item_path) else []
+                    }
+                    result["subdirectories"].append(subdir_info)
+        except Exception as e:
+            result["error"] = str(e)
+
+    return result
+
+@mcp.tool()
 def clear_settings(ctx: Context) -> str:
     """Clear all settings and cached data."""
     base_path = ctx.request_context.lifespan_context.base_path
-    
+
     # Check if base_path is set
     if not base_path:
         return "Error: Project path not set. Please use set_project_path to set a project directory first."
-    
+
     settings = ctx.request_context.lifespan_context.settings
-    
+
     # Clear all settings files
     settings.clear()
-    
+
     # Clear in-memory cache and index
     global file_index, code_content_cache
     file_index.clear()
     code_content_cache.clear()
-    
+
     return f"All settings and cache cleared from {settings.settings_path}"
 
 # ----- PROMPTS -----
@@ -567,8 +656,8 @@ def clear_settings(ctx: Context) -> str:
 def analyze_code(file_path: str = "", query: str = "") -> list[types.PromptMessage]:
     """Prompt for analyzing code in the project."""
     messages = [
-        types.PromptMessage(role="user", content=types.TextContent(type="text", text=f"""I need you to analyze some code from my project. 
-        
+        types.PromptMessage(role="user", content=types.TextContent(type="text", text=f"""I need you to analyze some code from my project.
+
 {f'Please analyze the file: {file_path}' if file_path else ''}
 {f'I want to understand: {query}' if query else ''}
 
@@ -595,16 +684,16 @@ def set_project() -> list[types.PromptMessage]:
     messages = [
         types.PromptMessage(role="user", content=types.TextContent(type="text", text="""
         I need to analyze code from a project, but I haven't set the project path yet. Please help me set up the project path and index the code.
-        
+
         First, I need to specify which project directory to analyze.
         """)),
         types.PromptMessage(role="assistant", content=types.TextContent(type="text", text="""
         Before I can help you analyze any code, we need to set up the project path. This is a required first step.
-        
+
         Please provide the full path to your project folder. For example:
         - Windows: "C:/Users/username/projects/my-project"
         - macOS/Linux: "/home/username/projects/my-project"
-        
+
         Once you provide the path, I'll use the `set_project_path` tool to configure the code analyzer to work with your project.
         """))
     ]
@@ -619,16 +708,16 @@ def _index_project(base_path: str) -> int:
     """
     file_count = 0
     file_index.clear()
-    
+
     for root, dirs, files in os.walk(base_path):
         # Skip hidden directories and common build/dependency directories
-        dirs[:] = [d for d in dirs if not d.startswith('.') and 
+        dirs[:] = [d for d in dirs if not d.startswith('.') and
                  d not in ['node_modules', 'venv', '__pycache__', 'build', 'dist']]
-        
+
         # Create relative path from base_path
         rel_path = os.path.relpath(root, base_path)
         current_dir = file_index
-        
+
         # Skip the '.' directory (base_path itself)
         if rel_path != '.':
             # Split the path and navigate/create the tree
@@ -637,26 +726,26 @@ def _index_project(base_path: str) -> int:
                 if part not in current_dir:
                     current_dir[part] = {}
                 current_dir = current_dir[part]
-        
+
         # Add files to current directory
         for file in files:
             # Skip hidden files and files with unsupported extensions
             _, ext = os.path.splitext(file)
             if file.startswith('.') or ext not in supported_extensions:
                 continue
-                
+
             # Store file information
             file_path = os.path.join(rel_path, file).replace('\\', '/')
             if rel_path == '.':
                 file_path = file
-                
+
             current_dir[file] = {
                 "type": "file",
                 "path": file_path,
                 "ext": ext
             }
             file_count += 1
-            
+
     return file_count
 
 def _count_files(directory: Dict) -> int:
@@ -678,7 +767,7 @@ def _get_all_files(directory: Dict, prefix: str = "") -> List[Tuple[str, Dict]]:
     Returns a list of (file_path, file_info) tuples.
     """
     result = []
-    
+
     for name, value in directory.items():
         if isinstance(value, dict):
             if "type" in value and value["type"] == "file":
@@ -686,12 +775,27 @@ def _get_all_files(directory: Dict, prefix: str = "") -> List[Tuple[str, Dict]]:
             else:
                 new_prefix = f"{prefix}/{name}" if prefix else name
                 result.extend(_get_all_files(value, new_prefix))
-    
+
     return result
 
 def main():
     """Entry point for the code indexer."""
     print("Starting Code Index MCP Server...", file=sys.stderr)
+
+    # 確保臨時目錄存在
+    temp_dir = os.path.join(tempfile.gettempdir(), "code_indexer")
+    print(f"Temporary directory: {temp_dir}")
+
+    if not os.path.exists(temp_dir):
+        print(f"Creating temporary directory: {temp_dir}")
+        try:
+            os.makedirs(temp_dir, exist_ok=True)
+            print(f"Temporary directory created successfully")
+        except Exception as e:
+            print(f"Error creating temporary directory: {e}", file=sys.stderr)
+    else:
+        print(f"Temporary directory already exists")
+
     mcp.run()
 
 if __name__ == "__main__":
