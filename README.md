@@ -13,31 +13,71 @@ Code Index MCP is a Model Context Protocol server that enables large language mo
 
 ## Installation
 
-This project uses uv for environment management and dependency installation.
+This project uses two key tools:
+
+1. **uv**: A fast Python package manager for dependency installation
+2. **uvx**: A command-line tool provided by this package to run the Code Index MCP server
+
+### Installation Steps
 
 1. Ensure you have Python 3.10 or later installed
-2. Install uv (recommended):
 
+2. Install uv (recommended but not required):
    ```bash
    # Windows
    powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
    # macOS/Linux
    curl -LsSf https://astral.sh/uv/install.sh | sh
    ```
-3. Getting the code:
 
+3. Install the code-index-mcp package to get the uvx command:
    ```bash
-   # Clone the repository
-   git clone https://github.com/your-username/code-index-mcp.git
+   # Using uv (recommended)
+   uv pip install code-index-mcp
+
+   # Or using traditional pip
+   pip install code-index-mcp
+   ```
+
+4. After installation, you can use the uvx command:
+   ```bash
+   uvx /path/to/your/project
+   ```
+
+### Installing from Source
+
+If you want to install from source code:
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/johnhuang316/code-index-mcp.git
+   cd code-index-mcp
+   ```
+
+2. Install the package (this will also install the uvx command):
+   ```bash
+   # Using uv (recommended)
+   uv pip install -e .
+
+   # Or using traditional pip
+   pip install -e .
    ```
 
 ## Usage
 
 ### Running the Server Directly
 
+There are multiple ways to run the server:
+
 ```bash
-# Run directly with uv - no additional dependency installation needed
+# Using the uvx command (requires installing the package first)
+uvx
+
+# Using uv to run the script directly (doesn't require installing the package)
 uv run run.py
+
+# Using Python directly (doesn't require installing the package)
+python -m code_index_mcp.server
 ```
 
 UV will automatically handle all dependency installations based on the project's configuration.
@@ -62,14 +102,23 @@ When using the containerized version, you'll need to set the project path explic
 
 You can easily integrate Code Index MCP with Claude Desktop:
 
-#### Option 1: Using UV (Direct Installation)
+#### Prerequisites
 
-1. Ensure you have UV installed (see installation section above)
-2. Find or create the Claude Desktop configuration file:
+1. Make sure you have completed the appropriate installation steps above
+2. Verify that the command you plan to use is available:
+   - For Option 1: Verify `uvx` is available by running `uvx --help` in your terminal
+   - For Option 2: Make sure you have the source code repository
+   - For Option 3: Ensure Docker is installed and the image is built
 
+#### Configuration Steps
+
+1. Find or create the Claude Desktop configuration file:
    - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
    - macOS/Linux: `~/Library/Application Support/Claude/claude_desktop_config.json`
-3. Add the following configuration (replace with your actual path):
+
+2. Add the appropriate configuration based on your preferred method:
+
+#### Option 1: Using uvx (Recommended, requires package installation)
 
    **For Windows**:
 
@@ -79,7 +128,7 @@ You can easily integrate Code Index MCP with Claude Desktop:
        "code-indexer": {
          "command": "uvx",
          "args": [
-            "C:\\Users\\username\\path\\to\\code-index-mcp"
+            "C:\\Users\\username\\path\\to\\project"
           ]
        }
      }
@@ -94,16 +143,35 @@ You can easily integrate Code Index MCP with Claude Desktop:
        "code-indexer": {
          "command": "uvx",
          "args": [
-            "/Users/username/path/to/code-index-mcp"
+            "/Users/username/path/to/project"
           ]
        }
      }
    }
    ```
 
-   **Note**: The tool can also be run directly with `uv run run.py` which may be useful for development and debugging.
+   **Note**: The `uvx` command is available after installing the package with `pip install code-index-mcp` or `uv pip install code-index-mcp`.
 
-#### Option 2: Using Docker (Containerized)
+#### Option 2: Using Python directly (No package installation required)
+
+   ```json
+   {
+     "mcpServers": {
+       "code-indexer": {
+         "command": "python",
+         "args": [
+           "-m",
+           "code_index_mcp.server"
+         ],
+         "cwd": "C:\\path\\to\\code-index-mcp"
+       }
+     }
+   }
+   ```
+
+   **Note**: This option requires specifying the full path to the source code repository in the `cwd` parameter.
+
+#### Option 3: Using Docker (Containerized)
 
 1. Build the Docker image as described in the Docker section above
 2. Find or create the Claude Desktop configuration file (same locations as above)
