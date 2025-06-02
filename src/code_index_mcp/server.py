@@ -28,7 +28,15 @@ code_content_cache = {}
 supported_extensions = [
     '.py', '.js', '.ts', '.jsx', '.tsx', '.java', '.c', '.cpp', '.h', '.hpp',
     '.cs', '.go', '.rb', '.php', '.swift', '.kt', '.rs', '.scala', '.sh',
-    '.bash', '.html', '.css', '.scss', '.md', '.json', '.xml', '.yml', '.yaml'
+    '.bash', '.html', '.css', '.scss', '.md', '.json', '.xml', '.yml', '.yaml',
+    # Frontend frameworks
+    '.vue', '.svelte', '.mjs', '.cjs',
+    # Style languages
+    '.less', '.sass', '.stylus', '.styl',
+    # Template engines
+    '.hbs', '.handlebars', '.ejs', '.pug',
+    # Modern frontend
+    '.astro', '.mdx'
 ]
 
 @dataclass

@@ -29,7 +29,8 @@ This server integrates with the [Model Context Protocol](https://modelcontextpro
 The server supports multiple programming languages and file extensions including:
 
 - Python (.py)
-- JavaScript/TypeScript (.js, .ts, .jsx, .tsx)
+- JavaScript/TypeScript (.js, .ts, .jsx, .tsx, .mjs, .cjs)
+- Frontend Frameworks (.vue, .svelte, .astro)
 - Java (.java)
 - C/C++ (.c, .cpp, .h, .hpp)
 - C# (.cs)
@@ -41,8 +42,9 @@ The server supports multiple programming languages and file extensions including
 - Rust (.rs)
 - Scala (.scala)
 - Shell scripts (.sh, .bash)
-- Web files (.html, .css, .scss)
-- Documentation/Config (.md, .json, .xml, .yml, .yaml)
+- Web files (.html, .css, .scss, .less, .sass, .stylus, .styl)
+- Template engines (.hbs, .handlebars, .ejs, .pug)
+- Documentation/Config (.md, .mdx, .json, .xml, .yml, .yaml)
 
 ## Installation
 
