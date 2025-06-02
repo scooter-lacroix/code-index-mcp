@@ -37,3 +37,6 @@ Thumbs.db
 
 # Code Index MCP specific files
 .code_indexer/
+
+# Test files
+test_*.py
