@@ -38,7 +38,16 @@ supported_extensions = [
     # Modern frontend
     '.astro', '.mdx',
     # Database and SQL
-    '.sql', '.ddl', '.dml', '.mysql', '.postgresql', '.psql', '.sqlite'
+    '.sql', '.ddl', '.dml', '.mysql', '.postgresql', '.psql', '.sqlite',
+    '.mssql', '.oracle', '.ora', '.db2',
+    # Database objects
+    '.proc', '.procedure', '.func', '.function', '.view', '.trigger', '.index',
+    # Database frameworks and tools
+    '.migration', '.seed', '.fixture', '.schema',
+    # NoSQL and modern databases
+    '.cql', '.cypher', '.sparql', '.gql',
+    # Database migration tools
+    '.liquibase', '.flyway'
 ]
 
 @dataclass

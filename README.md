@@ -44,7 +44,12 @@ The server supports multiple programming languages and file extensions including
 - Shell scripts (.sh, .bash)
 - Web files (.html, .css, .scss, .less, .sass, .stylus, .styl)
 - Template engines (.hbs, .handlebars, .ejs, .pug)
-- Database/SQL (.sql, .ddl, .dml, .mysql, .postgresql, .psql, .sqlite)
+- **Database & SQL**:
+  - SQL files (.sql, .ddl, .dml)
+  - Database-specific (.mysql, .postgresql, .psql, .sqlite, .mssql, .oracle, .ora, .db2)
+  - Database objects (.proc, .procedure, .func, .function, .view, .trigger, .index)
+  - Migration & tools (.migration, .seed, .fixture, .schema, .liquibase, .flyway)
+  - NoSQL & modern (.cql, .cypher, .sparql, .gql)
 - Documentation/Config (.md, .mdx, .json, .xml, .yml, .yaml)
 
 ## Installation
