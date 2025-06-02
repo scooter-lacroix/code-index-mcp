@@ -36,7 +36,9 @@ supported_extensions = [
     # Template engines
     '.hbs', '.handlebars', '.ejs', '.pug',
     # Modern frontend
-    '.astro', '.mdx'
+    '.astro', '.mdx',
+    # Database and SQL
+    '.sql', '.ddl', '.dml', '.mysql', '.postgresql', '.psql', '.sqlite'
 ]
 
 @dataclass

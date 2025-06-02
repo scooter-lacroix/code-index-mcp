@@ -44,6 +44,7 @@ The server supports multiple programming languages and file extensions including
 - Shell scripts (.sh, .bash)
 - Web files (.html, .css, .scss, .less, .sass, .stylus, .styl)
 - Template engines (.hbs, .handlebars, .ejs, .pug)
+- Database/SQL (.sql, .ddl, .dml, .mysql, .postgresql, .psql, .sqlite)
 - Documentation/Config (.md, .mdx, .json, .xml, .yml, .yaml)
 
 ## Installation
