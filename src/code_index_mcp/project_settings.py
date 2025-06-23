@@ -414,19 +414,6 @@ class ProjectSettings:
                     print(f"Warning: Directory is not writable: {self.settings_path}")
                     return
 
-                # Preserve .gitignore file
-                gitignore_path = os.path.join(self.settings_path, ".gitignore")
-                has_gitignore = os.path.exists(gitignore_path)
-                gitignore_content = None
-
-                if has_gitignore:
-                    try:
-                        with open(gitignore_path, 'r', encoding='utf-8') as f:
-                            gitignore_content = f.read()
-                        print(f"Preserved .gitignore content")
-                    except Exception as e:
-                        print(f"Error reading .gitignore: {e}")
-
                 # Delete all files in the directory
                 try:
                     for filename in os.listdir(self.settings_path):
@@ -442,15 +429,6 @@ class ProjectSettings:
                             print(f"Error deleting {file_path}: {e}")
                 except Exception as e:
                     print(f"Error listing directory: {e}")
-
-                # Restore .gitignore file
-                if has_gitignore and gitignore_content:
-                    try:
-                        with open(gitignore_path, 'w', encoding='utf-8') as f:
-                            f.write(gitignore_content)
-                        print(f"Restored .gitignore file")
-                    except Exception as e:
-                        print(f"Error restoring .gitignore: {e}")
 
                 print(f"Settings directory cleared successfully")
             else:

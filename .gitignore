@@ -40,3 +40,6 @@ Thumbs.db
 
 # Test files
 test_*.py
+
+# Claude Code generated files
+CLAUDE.md
