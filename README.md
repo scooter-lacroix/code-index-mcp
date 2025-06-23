@@ -44,6 +44,7 @@ The server supports multiple programming languages and file extensions including
 - Rust (.rs)
 - Scala (.scala)
 - Shell scripts (.sh, .bash)
+- Zig (.zig)
 - Web files (.html, .css, .scss, .less, .sass, .stylus, .styl)
 - Template engines (.hbs, .handlebars, .ejs, .pug)
 - **Database & SQL**:
