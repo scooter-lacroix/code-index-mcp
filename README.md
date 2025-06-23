@@ -19,10 +19,12 @@ This server integrates with the [Model Context Protocol](https://modelcontextpro
 ## Key Features
 
 - **Project Indexing**: Recursively scans directories to build a searchable index of code files
-- **Code Search**: Find patterns, function definitions, and references across your codebase
+- **Advanced Search**: Intelligent search with automatic detection of ripgrep, ag, or grep for enhanced performance
+- **Fuzzy Search**: Safe fuzzy matching with word boundaries for flexible code discovery
 - **File Analysis**: Get detailed insights about file structure, imports, and complexity
 - **Smart Filtering**: Automatically ignores build directories, dependencies, and non-code files
 - **Persistent Storage**: Caches indexes for improved performance across sessions
+- **Lazy Loading**: Search tools are detected only when needed for optimal startup performance
 
 ## Supported File Types
 
@@ -105,7 +107,8 @@ After adding the configuration, restart Claude Desktop and the Code Index MCP to
 ### Core Tools
 
 - **set_project_path**: Sets the base project path for indexing.
-- **search_code**: Searches for code matches within the indexed files.
+- **search_code**: Basic search for code matches within the indexed files.
+- **search_code_advanced**: Enhanced search using external tools (ripgrep/ag/grep) with fuzzy matching support.
 - **find_files**: Finds files in the project matching a given pattern.
 - **get_file_summary**: Gets a summary of a specific file, including line count, functions, imports, etc.
 - **refresh_index**: Refreshes the project index.
@@ -131,6 +134,12 @@ Please set the project path to C:\Users\username\projects\my-python-project
 
 ```
 Search the code for all occurrences of "def process_data" in Python files
+```
+
+### Advanced Search with Fuzzy Matching
+
+```
+Use advanced search to find "process" with fuzzy matching enabled
 ```
 
 ### Getting a File Summary

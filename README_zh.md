@@ -19,17 +19,20 @@
 ## 主要特性
 
 - **專案索引**：遞迴掃描目錄以建構可搜尋的程式碼檔案索引
-- **程式碼搜尋**：在程式碼儲存庫中尋找模式、函式定義和引用
+- **進階搜尋**：智慧搜尋，自動偵測 ripgrep、ag 或 grep 以提升效能
+- **模糊搜尋**：使用詞邊界的安全模糊匹配，提供靈活的程式碼發現
 - **檔案分析**：取得有關檔案結構、匯入和複雜性的詳細資訊
 - **智慧篩選**：自動忽略建構目錄、相依套件和非程式碼檔案
 - **持久儲存**：快取索引以提高跨工作階段的效能
+- **延遲載入**：僅在需要時偵測搜尋工具，優化啟動效能
 
 ## 支援的檔案類型
 
 伺服器支援多種程式語言和檔案副檔名，包括：
 
 - Python (.py)
-- JavaScript/TypeScript (.js, .ts, .jsx, .tsx)
+- JavaScript/TypeScript (.js, .ts, .jsx, .tsx, .mjs, .cjs)
+- 前端框架 (.vue, .svelte, .astro)
 - Java (.java)
 - C/C++ (.c, .cpp, .h, .hpp)
 - C# (.cs)
@@ -41,8 +44,15 @@
 - Rust (.rs)
 - Scala (.scala)
 - Shell 指令碼 (.sh, .bash)
-- Web 檔案 (.html, .css, .scss)
-- 文件/配置 (.md, .json, .xml, .yml, .yaml)
+- Web 檔案 (.html, .css, .scss, .less, .sass, .stylus, .styl)
+- 模板引擎 (.hbs, .handlebars, .ejs, .pug)
+- **資料庫與 SQL**：
+  - SQL 檔案 (.sql, .ddl, .dml)
+  - 資料庫特定格式 (.mysql, .postgresql, .psql, .sqlite, .mssql, .oracle, .ora, .db2)
+  - 資料庫物件 (.proc, .procedure, .func, .function, .view, .trigger, .index)
+  - 遷移與工具 (.migration, .seed, .fixture, .schema, .liquibase, .flyway)
+  - NoSQL 與現代資料庫 (.cql, .cypher, .sparql, .gql)
+- 文件/配置 (.md, .mdx, .json, .xml, .yml, .yaml)
 
 ## 安裝
 
@@ -97,7 +107,8 @@ python -m code_index_mcp
 ### 核心工具
 
 - **set_project_path**：設定索引的基本專案路徑。
-- **search_code**：在已索引檔案中搜尋程式碼匹配項。
+- **search_code**：在已索引檔案中進行基本程式碼搜尋。
+- **search_code_advanced**：使用外部工具 (ripgrep/ag/grep) 的增強搜尋，支援模糊匹配。
 - **find_files**：尋找專案中符合給定模式的檔案。
 - **get_file_summary**：取得特定檔案的摘要，包括行數、函式、匯入等。
 - **refresh_index**：重新整理專案索引。
@@ -123,6 +134,12 @@ python -m code_index_mcp
 
 ```
 在 Python 檔案中搜尋所有出現 "def process_data" 的地方
+```
+
+### 進階搜尋與模糊匹配
+
+```
+使用進階搜尋並啟用模糊匹配來尋找 "process"
 ```
 
 ### 取得檔案摘要
