@@ -12,13 +12,12 @@ import tempfile
 import hashlib
 from datetime import datetime
 
+from .constants import (
+    SETTINGS_DIR, CONFIG_FILE, INDEX_FILE, CACHE_FILE
+)
+
 class ProjectSettings:
     """Class for managing project settings and index data"""
-
-    SETTINGS_DIR = "code_indexer"
-    CONFIG_FILE = "config.json"
-    INDEX_FILE = "file_index.pickle"
-    CACHE_FILE = "content_cache.pickle"
 
     def __init__(self, base_path, skip_load=False):
         """Initialize project settings
@@ -50,18 +49,13 @@ class ProjectSettings:
                 print(f"Using current directory as fallback: {system_temp}")
 
             # Create code_indexer directory
-            temp_base_dir = os.path.join(system_temp, self.SETTINGS_DIR)
+            temp_base_dir = os.path.join(system_temp, SETTINGS_DIR)
             print(f"Code indexer directory path: {temp_base_dir}")
 
             if not os.path.exists(temp_base_dir):
                 print(f"Creating code indexer directory: {temp_base_dir}")
                 os.makedirs(temp_base_dir, exist_ok=True)
-
-                # Create a README.md file explaining the purpose of this directory
-                readme_path = os.path.join(temp_base_dir, "README.md")
-                with open(readme_path, 'w', encoding='utf-8') as f:
-                    f.write("# Code Indexer Cache Directory\n\nThis directory contains cached data for the Code Index MCP tool.\nEach subdirectory corresponds to a different project.\n")
-                print(f"README file created: {readme_path}")
+                print(f"Code indexer directory created: {temp_base_dir}")
             else:
                 print(f"Code indexer directory already exists: {temp_base_dir}")
         except Exception as e:
@@ -104,24 +98,7 @@ class ProjectSettings:
                 print(f"Creating project settings directory: {self.settings_path}")
                 # Create directory structure
                 os.makedirs(self.settings_path, exist_ok=True)
-
-                # Create a README.md file explaining the purpose of this directory
-                readme_path = os.path.join(self.settings_path, "README.md")
-                readme_content = (
-                    f"# Code Indexer Cache Directory for {self.base_path}\n\n"
-                    f"This directory contains cached data for the Code Index MCP tool:\n\n"
-                    f"- `config.json`: Project configuration\n"
-                    f"- `file_index.pickle`: Index of project files\n"
-                    f"- `content_cache.pickle`: Cached file contents\n\n"
-                    f"These files are automatically generated and stored in the system temporary directory.\n"
-                )
-
-                try:
-                    with open(readme_path, 'w', encoding='utf-8') as f:
-                        f.write(readme_content)
-                    print(f"README file created: {readme_path}")
-                except Exception as e:
-                    print(f"Warning: Could not create README file: {e}")
+                print(f"Project settings directory created: {self.settings_path}")
             else:
                 print(f"Project settings directory already exists: {self.settings_path}")
 
@@ -148,38 +125,38 @@ class ProjectSettings:
     def get_config_path(self):
         """Get the path to the configuration file"""
         try:
-            path = os.path.join(self.settings_path, self.CONFIG_FILE)
+            path = os.path.join(self.settings_path, CONFIG_FILE)
             # Ensure directory exists
             os.makedirs(os.path.dirname(path), exist_ok=True)
             return path
         except Exception as e:
             print(f"Error getting config path: {e}")
             # If error occurs, use file in current directory as fallback
-            return os.path.join(os.getcwd(), self.CONFIG_FILE)
+            return os.path.join(os.getcwd(), CONFIG_FILE)
 
     def get_index_path(self):
         """Get the path to the index file"""
         try:
-            path = os.path.join(self.settings_path, self.INDEX_FILE)
+            path = os.path.join(self.settings_path, INDEX_FILE)
             # Ensure directory exists
             os.makedirs(os.path.dirname(path), exist_ok=True)
             return path
         except Exception as e:
             print(f"Error getting index path: {e}")
             # If error occurs, use file in current directory as fallback
-            return os.path.join(os.getcwd(), self.INDEX_FILE)
+            return os.path.join(os.getcwd(), INDEX_FILE)
 
     def get_cache_path(self):
         """Get the path to the cache file"""
         try:
-            path = os.path.join(self.settings_path, self.CACHE_FILE)
+            path = os.path.join(self.settings_path, CACHE_FILE)
             # Ensure directory exists
             os.makedirs(os.path.dirname(path), exist_ok=True)
             return path
         except Exception as e:
             print(f"Error getting cache path: {e}")
             # If error occurs, use file in current directory as fallback
-            return os.path.join(os.getcwd(), self.CACHE_FILE)
+            return os.path.join(os.getcwd(), CACHE_FILE)
 
     def _get_timestamp(self):
         """Get current timestamp"""
@@ -257,7 +234,7 @@ class ProjectSettings:
             if not os.access(dir_path, os.W_OK):
                 print(f"Warning: Directory is not writable: {dir_path}")
                 # Use current directory as fallback
-                index_path = os.path.join(os.getcwd(), self.INDEX_FILE)
+                index_path = os.path.join(os.getcwd(), INDEX_FILE)
                 print(f"Using fallback path: {index_path}")
 
             with open(index_path, 'wb') as f:
@@ -268,7 +245,7 @@ class ProjectSettings:
             print(f"Error saving index: {e}")
             # Try saving to current directory
             try:
-                fallback_path = os.path.join(os.getcwd(), self.INDEX_FILE)
+                fallback_path = os.path.join(os.getcwd(), INDEX_FILE)
                 print(f"Trying fallback path: {fallback_path}")
                 with open(fallback_path, 'wb') as f:
                     pickle.dump(file_index, f)
@@ -304,7 +281,7 @@ class ProjectSettings:
                     return {}
             else:
                 # Try loading from current directory
-                fallback_path = os.path.join(os.getcwd(), self.INDEX_FILE)
+                fallback_path = os.path.join(os.getcwd(), INDEX_FILE)
                 if os.path.exists(fallback_path):
                     print(f"Trying fallback path: {fallback_path}")
                     try:
@@ -340,7 +317,7 @@ class ProjectSettings:
             if not os.access(dir_path, os.W_OK):
                 print(f"Warning: Directory is not writable: {dir_path}")
                 # Use current directory as fallback
-                cache_path = os.path.join(os.getcwd(), self.CACHE_FILE)
+                cache_path = os.path.join(os.getcwd(), CACHE_FILE)
                 print(f"Using fallback path: {cache_path}")
 
             with open(cache_path, 'wb') as f:
@@ -351,7 +328,7 @@ class ProjectSettings:
             print(f"Error saving cache: {e}")
             # Try saving to current directory
             try:
-                fallback_path = os.path.join(os.getcwd(), self.CACHE_FILE)
+                fallback_path = os.path.join(os.getcwd(), CACHE_FILE)
                 print(f"Trying fallback path: {fallback_path}")
                 with open(fallback_path, 'wb') as f:
                     pickle.dump(content_cache, f)
@@ -387,7 +364,7 @@ class ProjectSettings:
                     return {}
             else:
                 # Try loading from current directory
-                fallback_path = os.path.join(os.getcwd(), self.CACHE_FILE)
+                fallback_path = os.path.join(os.getcwd(), CACHE_FILE)
                 if os.path.exists(fallback_path):
                     print(f"Trying fallback path: {fallback_path}")
                     try:
@@ -462,7 +439,7 @@ class ProjectSettings:
                     stats['all_files'] = all_files
 
                     # Get details for specific files
-                    for filename in [self.CONFIG_FILE, self.INDEX_FILE, self.CACHE_FILE]:
+                    for filename in [CONFIG_FILE, INDEX_FILE, CACHE_FILE]:
                         file_path = os.path.join(self.settings_path, filename)
                         if os.path.exists(file_path):
                             try:

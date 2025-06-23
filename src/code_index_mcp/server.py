@@ -16,8 +16,9 @@ import tempfile
 from mcp.server.fastmcp import FastMCP, Context, Image
 from mcp import types
 
-# Import the ProjectSettings class - using relative import
+# Import the ProjectSettings class and constants - using relative import
 from .project_settings import ProjectSettings
+from .constants import SETTINGS_DIR
 
 # Create the MCP server
 mcp = FastMCP("CodeIndexer", dependencies=["pathlib"])
@@ -532,7 +533,7 @@ def get_settings_info(ctx: Context) -> Dict[str, Any]:
     # Check if base_path is set
     if not base_path:
         # Even if base_path is not set, we can still show the temp directory
-        temp_dir = os.path.join(tempfile.gettempdir(), "code_indexer")
+        temp_dir = os.path.join(tempfile.gettempdir(), SETTINGS_DIR)
         return {
             "status": "not_configured",
             "message": "Project path not set. Please use set_project_path to set a project directory first.",
@@ -549,7 +550,7 @@ def get_settings_info(ctx: Context) -> Dict[str, Any]:
     stats = settings.get_stats()
 
     # Get temp directory
-    temp_dir = os.path.join(tempfile.gettempdir(), "code_indexer")
+    temp_dir = os.path.join(tempfile.gettempdir(), SETTINGS_DIR)
 
     return {
         "settings_directory": settings.settings_path,
@@ -563,7 +564,7 @@ def get_settings_info(ctx: Context) -> Dict[str, Any]:
 @mcp.tool()
 def create_temp_directory() -> Dict[str, Any]:
     """Create the temporary directory used for storing index data."""
-    temp_dir = os.path.join(tempfile.gettempdir(), "code_indexer")
+    temp_dir = os.path.join(tempfile.gettempdir(), SETTINGS_DIR)
 
     result = {
         "temp_directory": temp_dir,
@@ -571,19 +572,10 @@ def create_temp_directory() -> Dict[str, Any]:
     }
 
     try:
-        # Create the directory if it doesn't exist
-        if not os.path.exists(temp_dir):
-            os.makedirs(temp_dir, exist_ok=True)
-            result["created"] = True
-
-            # Create a README file
-            readme_path = os.path.join(temp_dir, "README.md")
-            with open(readme_path, 'w', encoding='utf-8') as f:
-                f.write("# Code Indexer Cache Directory\n\nThis directory contains cached data for the Code Index MCP tool.\nEach subdirectory corresponds to a different project.\n")
-            result["readme_created"] = True
-        else:
-            result["created"] = False
-
+        # Use ProjectSettings to handle directory creation consistently
+        temp_settings = ProjectSettings("", skip_load=True)
+        
+        result["created"] = not result["existed_before"]
         result["exists_now"] = os.path.exists(temp_dir)
         result["is_directory"] = os.path.isdir(temp_dir)
     except Exception as e:
@@ -594,7 +586,7 @@ def create_temp_directory() -> Dict[str, Any]:
 @mcp.tool()
 def check_temp_directory() -> Dict[str, Any]:
     """Check the temporary directory used for storing index data."""
-    temp_dir = os.path.join(tempfile.gettempdir(), "code_indexer")
+    temp_dir = os.path.join(tempfile.gettempdir(), SETTINGS_DIR)
 
     result = {
         "temp_directory": temp_dir,
@@ -778,19 +770,16 @@ def main():
     """Entry point for the code indexer."""
     print("Starting Code Index MCP Server...", file=sys.stderr)
 
-    # Ensure temporary directory exists
-    temp_dir = os.path.join(tempfile.gettempdir(), "code_indexer")
+    # Ensure temporary directory exists using ProjectSettings
+    temp_dir = os.path.join(tempfile.gettempdir(), SETTINGS_DIR)
     print(f"Temporary directory: {temp_dir}")
 
-    if not os.path.exists(temp_dir):
-        print(f"Creating temporary directory: {temp_dir}")
-        try:
-            os.makedirs(temp_dir, exist_ok=True)
-            print(f"Temporary directory created successfully")
-        except Exception as e:
-            print(f"Error creating temporary directory: {e}", file=sys.stderr)
-    else:
-        print(f"Temporary directory already exists")
+    try:
+        # Use ProjectSettings to handle directory creation consistently
+        temp_settings = ProjectSettings("", skip_load=True)
+        print(f"Temporary directory setup completed")
+    except Exception as e:
+        print(f"Error setting up temporary directory: {e}", file=sys.stderr)
 
     mcp.run()
 
