@@ -13,6 +13,7 @@ import json
 import fnmatch
 import sys
 import tempfile
+import subprocess
 from mcp.server.fastmcp import FastMCP, Context, Image
 from mcp import types
 
@@ -262,7 +263,15 @@ def set_project_path(path: str, ctx: Context) -> str:
                 print(f"Existing cache found and loaded successfully")
                 code_content_cache.update(loaded_cache)
 
-            return f"Project path set to: {abs_path}. Loaded existing index with {file_count} files."
+            # Get search capabilities info
+            search_tool = ctx.request_context.lifespan_context.settings.get_preferred_search_tool()
+            
+            if search_tool == 'basic':
+                search_info = " Basic search available."
+            else:
+                search_info = f" Advanced search enabled ({search_tool})."
+            
+            return f"Project path set to: {abs_path}. Loaded existing index with {file_count} files.{search_info}"
         else:
             print(f"No existing index found, creating new index...")
 
@@ -281,7 +290,15 @@ def set_project_path(path: str, ctx: Context) -> str:
         }
         ctx.request_context.lifespan_context.settings.save_config(config)
 
-        return f"Project path set to: {abs_path}. Indexed {file_count} files."
+        # Get search capabilities info (this will trigger lazy detection)
+        search_tool = ctx.request_context.lifespan_context.settings.get_preferred_search_tool()
+        
+        if search_tool == 'basic':
+            search_info = " Basic search available."
+        else:
+            search_info = f" Advanced search enabled ({search_tool})."
+
+        return f"Project path set to: {abs_path}. Indexed {file_count} files.{search_info}"
     except Exception as e:
         return f"Error setting project path: {e}"
 
@@ -342,6 +359,71 @@ def search_code(query: str, ctx: Context, extensions: Optional[List[str]] = None
     ctx.request_context.lifespan_context.settings.save_cache(code_content_cache)
 
     return results
+
+@mcp.tool()
+def search_code_advanced(
+    pattern: str, 
+    ctx: Context,
+    case_sensitive: bool = True,
+    context_lines: int = 0,
+    file_pattern: Optional[str] = None,
+    fuzzy: bool = False
+) -> Dict[str, Any]:
+    """
+    Advanced search using external tools (ripgrep, ag, grep) for better performance.
+    Falls back to basic search if no advanced tools are available.
+    
+    Args:
+        pattern: Search pattern
+        case_sensitive: Case sensitive search
+        context_lines: Number of context lines to show around matches
+        file_pattern: File pattern to include (e.g., "*.py", "*.js")
+        fuzzy: Enable safe fuzzy search patterns:
+               - Adds word boundary matching for better results
+               - Allows partial word matching at word boundaries
+               - Safe alternative to full regex support
+    
+    Returns:
+        Dict containing search results and metadata
+    """
+    base_path = ctx.request_context.lifespan_context.base_path
+    
+    # Check if base_path is set
+    if not base_path:
+        return {"error": "Project path not set. Please use set_project_path to set a project directory first."}
+    
+    # Get search tool configuration
+    settings = ctx.request_context.lifespan_context.settings
+    preferred_tool = settings.get_preferred_search_tool()
+    
+    if preferred_tool == 'basic':
+        # Fallback to existing search_code function
+        ctx.info("Using basic search (no advanced tools available)")
+        return {
+            "tool_used": "basic",
+            "results": search_code(pattern, ctx, case_sensitive=case_sensitive)
+        }
+    
+    try:
+        # Use advanced search tool
+        results = _execute_advanced_search(
+            pattern, base_path, preferred_tool, case_sensitive, context_lines, file_pattern, fuzzy
+        )
+        
+        return {
+            "tool_used": preferred_tool,
+            "results": results,
+            "total_matches": sum(len(matches) for matches in results.values())
+        }
+        
+    except Exception as e:
+        ctx.info(f"Advanced search failed: {e}, falling back to basic search")
+        # Fallback to basic search
+        return {
+            "tool_used": "basic_fallback",
+            "results": search_code(pattern, ctx, case_sensitive=case_sensitive),
+            "fallback_reason": str(e)
+        }
 
 @mcp.tool()
 def find_files(pattern: str, ctx: Context) -> List[str]:
@@ -638,6 +720,38 @@ def clear_settings(ctx: Context) -> str:
 
     return f"All settings and cache cleared from {settings.settings_path}"
 
+@mcp.tool()
+def refresh_search_tools(ctx: Context) -> str:
+    """Refresh search tools detection and show available capabilities."""
+    base_path = ctx.request_context.lifespan_context.base_path
+    
+    # Check if base_path is set
+    if not base_path:
+        return "Error: Project path not set. Please use set_project_path to set a project directory first."
+    
+    settings = ctx.request_context.lifespan_context.settings
+    
+    # Refresh search tools
+    config = settings.refresh_search_tools()
+    
+    # Build response message
+    preferred = config.get('preferred_tool', 'basic')
+    available_tools = config.get('available_tools', {})
+    
+    message = f"Search tools refreshed. Preferred tool: {preferred}\n"
+    message += "Available tools:\n"
+    
+    for tool_name, is_available in available_tools.items():
+        status = "✓" if is_available else "✗"
+        message += f"  {status} {tool_name}\n"
+    
+    if preferred != 'basic':
+        message += f"\nAdvanced search capabilities enabled with {preferred}."
+    else:
+        message += "\nOnly basic search available. Consider installing ripgrep for better performance."
+    
+    return message
+
 # ----- PROMPTS -----
 
 @mcp.prompt()
@@ -765,6 +879,145 @@ def _get_all_files(directory: Dict, prefix: str = "") -> List[Tuple[str, Dict]]:
                 result.extend(_get_all_files(value, new_prefix))
 
     return result
+
+def _create_safe_fuzzy_pattern(pattern: str) -> str:
+    """Create safe fuzzy search patterns that are more permissive than exact match
+    but still safe from regex injection attacks.
+    
+    Args:
+        pattern: Original search pattern
+        
+    Returns:
+        Safe fuzzy pattern for grep -E (extended regex)
+    """
+    import re
+    
+    # Escape any regex special characters to make them literal
+    escaped = re.escape(pattern)
+    
+    # Create fuzzy pattern that matches:
+    # 1. Word at start of word boundary (e.g., "test" in "testing")
+    # 2. Word at end of word boundary (e.g., "test" in "mytest") 
+    # 3. Whole word (e.g., "test" as standalone word)
+    if len(pattern) >= 3:  # Only for patterns of reasonable length
+        # This pattern allows partial matches at word boundaries
+        fuzzy_pattern = f"\\b{escaped}|{escaped}\\b"
+    else:
+        # For short patterns, require full word boundaries to avoid too many matches
+        fuzzy_pattern = f"\\b{escaped}\\b"
+    
+    return fuzzy_pattern
+
+def _execute_advanced_search(
+    pattern: str, 
+    base_path: str, 
+    tool: str, 
+    case_sensitive: bool, 
+    context_lines: int, 
+    file_pattern: Optional[str],
+    fuzzy: bool = False
+) -> Dict[str, List[Tuple[int, str]]]:
+    """Execute advanced search using external tools.
+    
+    Returns:
+        Dict mapping file paths to lists of (line_number, line_content) tuples
+    """
+    # Prepare search pattern
+    search_pattern = pattern
+    if fuzzy:
+        search_pattern = _create_safe_fuzzy_pattern(pattern)
+    
+    # Build command based on tool
+    if tool == 'ripgrep':
+        if fuzzy:
+            cmd = ['rg', '--line-number', '--no-heading']  # Use regex mode for fuzzy
+        else:
+            cmd = ['rg', '--line-number', '--no-heading', '--fixed-strings']
+        if not case_sensitive:
+            cmd.append('--ignore-case')
+        if context_lines > 0:
+            cmd.extend(['-A', str(context_lines), '-B', str(context_lines)])
+        if file_pattern:
+            cmd.extend(['--glob', file_pattern])
+            
+    elif tool == 'ag':
+        if fuzzy:
+            cmd = ['ag', '--line-numbers', '--noheading']  # Use regex mode for fuzzy
+        else:
+            cmd = ['ag', '--line-numbers', '--noheading', '--literal']
+        if not case_sensitive:
+            cmd.append('--ignore-case')
+        if context_lines > 0:
+            cmd.extend(['-A', str(context_lines), '-B', str(context_lines)])
+        if file_pattern:
+            cmd.extend(['--', file_pattern])
+            
+    elif tool == 'grep':
+        if fuzzy:
+            cmd = ['grep', '-rn', '-E']  # -E for extended regex (safe fuzzy patterns)
+        else:
+            cmd = ['grep', '-rn', '-F']  # -F for fixed strings (exact match)
+        if not case_sensitive:
+            cmd.append('-i')
+        if context_lines > 0:
+            cmd.extend(['-A', str(context_lines), '-B', str(context_lines)])
+        if file_pattern:
+            cmd.extend(['--include=' + file_pattern])
+    else:
+        raise ValueError(f"Unknown search tool: {tool}")
+    
+    # Add pattern and base path
+    cmd.extend([search_pattern, base_path])
+    
+    # Execute command
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        cwd=base_path
+    )
+    
+    if result.returncode not in [0, 1]:  # 0 = found, 1 = not found, others = error
+        raise Exception(f"Search command failed: {result.stderr}")
+    
+    # Parse output
+    return _parse_search_output(result.stdout, base_path)
+
+def _parse_search_output(output: str, base_path: str) -> Dict[str, List[Tuple[int, str]]]:
+    """Parse search tool output into structured format.
+    
+    Returns:
+        Dict mapping file paths to lists of (line_number, line_content) tuples
+    """
+    results = {}
+    
+    for line in output.splitlines():
+        if not line.strip():
+            continue
+            
+        # Parse format: filename:line_number:content
+        parts = line.split(':', 2)
+        if len(parts) >= 3:
+            file_path = parts[0]
+            try:
+                line_number = int(parts[1])
+                content = parts[2]
+                
+                # Make file path relative to base_path
+                if file_path.startswith(base_path):
+                    file_path = os.path.relpath(file_path, base_path)
+                
+                if file_path not in results:
+                    results[file_path] = []
+                
+                results[file_path].append((line_number, content.strip()))
+                
+            except ValueError:
+                # Skip lines that don't have valid line numbers
+                continue
+    
+    return results
 
 def main():
     """Entry point for the code indexer."""

@@ -10,6 +10,7 @@ import shutil
 import pickle
 import tempfile
 import hashlib
+import subprocess
 from datetime import datetime
 
 from .constants import (
@@ -28,6 +29,7 @@ class ProjectSettings:
         """
         self.base_path = base_path
         self.skip_load = skip_load
+        self._search_tools_cache = None  # Lazy-loaded search tools configuration
 
         # Ensure the base path of the temporary directory exists
         try:
@@ -474,3 +476,85 @@ class ProjectSettings:
                 'temp_dir': tempfile.gettempdir(),
                 'current_dir': os.getcwd()
             }
+
+    def get_search_tools_config(self):
+        """Get search tools configuration with lazy loading.
+        
+        Returns:
+            dict: Search tools configuration with preferred tool and available tools
+        """
+        if self._search_tools_cache is None:
+            print("Detecting available search tools...")
+            self._search_tools_cache = self._detect_search_tools()
+            print(f"Search tools detected. Preferred: {self._search_tools_cache.get('preferred_tool', 'basic')}")
+        
+        return self._search_tools_cache
+
+    def get_preferred_search_tool(self):
+        """Get the preferred search tool name.
+        
+        Returns:
+            str: Name of preferred search tool ('ripgrep', 'ag', 'grep', or 'basic')
+        """
+        config = self.get_search_tools_config()
+        return config.get('preferred_tool', 'basic')
+
+    def _detect_search_tools(self):
+        """Detect available search tools on the system.
+        
+        Returns:
+            dict: Configuration with available tools and preferred tool
+        """
+        tools_info = {
+            'detected_at': self._get_timestamp(),
+            'available_tools': {},
+            'preferred_tool': 'basic'
+        }
+        
+        # Check tools in priority order: ripgrep > ag > grep
+        search_tools = [
+            ('ripgrep', 'rg'),
+            ('ag', 'ag'), 
+            ('grep', 'grep')
+        ]
+        
+        for tool_name, command in search_tools:
+            is_available = self._is_tool_available(command)
+            tools_info['available_tools'][tool_name] = is_available
+            
+            # Set the first available tool as preferred
+            if is_available and tools_info['preferred_tool'] == 'basic':
+                tools_info['preferred_tool'] = tool_name
+        
+        return tools_info
+
+    def _is_tool_available(self, command):
+        """Check if a search tool is available on the system.
+        
+        Args:
+            command (str): Command to check (e.g., 'rg', 'ag', 'grep')
+            
+        Returns:
+            bool: True if tool is available, False otherwise
+        """
+        try:
+            result = subprocess.run(
+                [command, '--version'], 
+                capture_output=True, 
+                timeout=3,
+                check=False
+            )
+            return result.returncode == 0
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+            return False
+
+    def refresh_search_tools(self):
+        """Manually refresh search tools detection.
+        
+        Returns:
+            dict: Updated search tools configuration
+        """
+        print("Refreshing search tools detection...")
+        self._search_tools_cache = self._detect_search_tools()
+        print(f"Search tools refreshed. Preferred: {self._search_tools_cache.get('preferred_tool', 'basic')}")
+        return self._search_tools_cache
