@@ -44,6 +44,7 @@
 - Rust (.rs)
 - Scala (.scala)
 - Shell 指令碼 (.sh, .bash)
+- Zig (.zig)
 - Web 檔案 (.html, .css, .scss, .less, .sass, .stylus, .styl)
 - 模板引擎 (.hbs, .handlebars, .ejs, .pug)
 - **資料庫與 SQL**：
