@@ -355,7 +355,10 @@ class OptimizedProjectSettings:
                 # Clear memory-based storage
                 self.cache_storage.clear()
                 self.metadata_storage.clear()
-                self.file_index.clear()
+                if hasattr(self.file_index, 'clear'):
+                    self.file_index.clear()
+                else:
+                    self.file_index = {}
                 print("Memory storage cleared")
             
             # Also clear any legacy files

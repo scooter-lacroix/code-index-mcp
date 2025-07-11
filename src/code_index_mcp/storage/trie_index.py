@@ -88,4 +88,8 @@ class TrieFileIndex(FileIndexInterface):
                 _gather_files(child_node, f"{path}/{part}" if path else part)
         _gather_files(self.root, "")
         return files
+    
+    def clear(self) -> None:
+        """Clear all files from the index."""
+        self.root = TrieNode()
 

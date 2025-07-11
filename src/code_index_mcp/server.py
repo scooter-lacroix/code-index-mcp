@@ -15,6 +15,7 @@ import sys
 import tempfile
 import subprocess
 import time
+import asyncio
 from .lazy_loader import LazyContentManager
 from mcp.server.fastmcp import FastMCP, Context, Image
 from mcp import types
@@ -273,7 +274,7 @@ def set_project_path(path: str, ctx: Context) -> str:
 
         # Clear existing in-memory index and unload cached content
         global file_index, lazy_content_manager, memory_profiler, memory_aware_manager, performance_monitor
-        file_index.clear()
+        file_index = {}  # Always reset to dictionary - will be loaded as TrieFileIndex if available
         lazy_content_manager.unload_all()
 
         # Update the base path in context
@@ -334,7 +335,33 @@ def set_project_path(path: str, ctx: Context) -> str:
         loaded_index = ctx.request_context.lifespan_context.settings.load_index()
         if loaded_index:
             print(f"Existing index found and loaded successfully")
-            file_index = loaded_index
+            # Convert TrieFileIndex to dictionary format for compatibility
+            if hasattr(loaded_index, 'get_all_files'):
+                # This is a TrieFileIndex - convert to dict format
+                file_index = {}
+                for file_path, file_info in loaded_index.get_all_files():
+                    # Navigate to correct directory in index
+                    current_dir = file_index
+                    rel_path = os.path.dirname(file_path)
+                    
+                    if rel_path and rel_path != '.':
+                        path_parts = rel_path.replace('\\', '/').split('/')
+                        for part in path_parts:
+                            if part not in current_dir:
+                                current_dir[part] = {}
+                            current_dir = current_dir[part]
+                    
+                    # Add file to index
+                    filename = os.path.basename(file_path)
+                    current_dir[filename] = {
+                        "type": "file",
+                        "path": file_path,
+                        "ext": file_info.get('extension', '')
+                    }
+                print(f"Converted TrieFileIndex to dictionary format")
+            else:
+                file_index = loaded_index
+            
             file_count = _count_files(file_index)
             ctx.request_context.lifespan_context.file_count = file_count
 
@@ -662,6 +689,8 @@ def get_file_summary(file_path: str, ctx: Context) -> Dict[str, Any]:
 @mcp.tool()
 async def refresh_index(ctx: Context) -> Dict[str, Any]:
     """Refresh the project index using incremental indexing with progress tracking."""
+    import asyncio  # Ensure asyncio is available in this function scope
+    
     base_path = ctx.request_context.lifespan_context.base_path
 
     # Check if base_path is set
@@ -777,6 +806,166 @@ async def refresh_index(ctx: Context) -> Dict[str, Any]:
         }
 
 @mcp.tool()
+async def force_reindex(ctx: Context, clear_cache: bool = True) -> Dict[str, Any]:
+    """Force a complete re-index of the project, ignoring incremental metadata.
+    
+    Args:
+        clear_cache: Whether to clear all cached data before re-indexing (default: True)
+    """
+    base_path = ctx.request_context.lifespan_context.base_path
+
+    # Check if base_path is set
+    if not base_path:
+        return {
+            "error": "Project path not set. Please use set_project_path to set a project directory first.",
+            "success": False
+        }
+
+    try:
+        global performance_monitor
+        
+        # Start timing the force reindex operation
+        if performance_monitor:
+            performance_monitor.log_structured("info", "Starting force re-index operation", 
+                                             base_path=base_path, clear_cache=clear_cache)
+        
+        # Clear caches if requested
+        if clear_cache:
+            print("Clearing all caches and metadata...")
+            
+            # Clear settings cache
+            ctx.request_context.lifespan_context.settings.clear()
+            
+            # Clear lazy content manager cache
+            global lazy_content_manager
+            lazy_content_manager.unload_all()
+            
+            # Clear file index
+            _safe_clear_file_index()
+            
+            # Clear incremental indexer metadata
+            settings = ctx.request_context.lifespan_context.settings
+            indexer = IncrementalIndexer(settings)
+            indexer.clear_metadata()
+            
+            # Force garbage collection
+            import gc
+            gc.collect()
+            
+            print("Cache clearing completed.")
+
+        # Create progress tracker for force indexing
+        async with ProgressContext(
+            operation_name="Force Re-Index",
+            total_items=1000,  # Will be updated with actual file count
+            stages=["Clearing", "Scanning", "Full Indexing", "Saving"]
+        ) as progress_tracker:
+            
+            # Stage 1: Clearing (if cache clearing)
+            if clear_cache:
+                await progress_tracker.update_progress(
+                    stage_index=0,
+                    message="Cleared all caches and metadata"
+                )
+            
+            # Stage 2: Scanning
+            await progress_tracker.update_progress(
+                stage_index=1,
+                message="Starting complete directory scan..."
+            )
+            
+            # Count files for progress tracking
+            total_files = 0
+            print(f"Scanning directory: {base_path}")
+            
+            for root, dirs, files in os.walk(base_path):
+                total_files += len(files)
+                # Check for cancellation and provide progress updates
+                if total_files % 1000 == 0:
+                    progress_tracker.cancellation_token.check_cancelled()
+                    await progress_tracker.update_progress(
+                        message=f"Scanned {total_files} files so far..."
+                    )
+            
+            # Update total items with actual count
+            progress_tracker.total_items = max(total_files, 1)
+            
+            await progress_tracker.update_progress(
+                message=f"Complete scan finished: {total_files} files found"
+            )
+            
+            print(f"Force re-indexing {total_files} files...")
+            
+            # Stage 3: Full Indexing
+            await progress_tracker.update_progress(
+                stage_index=2,
+                message=f"Starting full indexing of {total_files} files..."
+            )
+            
+            # Force full re-index by using the regular indexing function
+            # but with cleared metadata so everything is treated as new
+            file_count = await _index_project_with_progress(base_path, progress_tracker)
+            ctx.request_context.lifespan_context.file_count = file_count
+            
+            # Stage 4: Saving
+            await progress_tracker.update_progress(
+                stage_index=3,
+                message="Saving complete index and metadata..."
+            )
+            
+            # Save the new index
+            ctx.request_context.lifespan_context.settings.save_index(file_index)
+            
+            # Update config with new timestamp
+            config = ctx.request_context.lifespan_context.settings.load_config()
+            ctx.request_context.lifespan_context.settings.save_config({
+                **config,
+                'last_indexed': ctx.request_context.lifespan_context.settings._get_timestamp(),
+                'force_reindex_count': config.get('force_reindex_count', 0) + 1
+            })
+            
+            await progress_tracker.update_progress(
+                message="Force re-index completed successfully"
+            )
+
+        # Get final stats
+        settings = ctx.request_context.lifespan_context.settings
+        indexer = IncrementalIndexer(settings)
+        stats = indexer.get_stats()
+        
+        # Log completion
+        if performance_monitor:
+            performance_monitor.log_structured("info", "Force re-index completed successfully", 
+                                             base_path=base_path, files_processed=file_count,
+                                             elapsed_time=progress_tracker.elapsed_time)
+            performance_monitor.increment_counter("force_reindex_operations_total")
+
+        return {
+            "success": True,
+            "message": f"Force re-index completed. Processed {file_count} files from scratch.",
+            "operation_id": progress_tracker.operation_id,
+            "files_processed": file_count,
+            "cache_cleared": clear_cache,
+            "metadata_stats": stats,
+            "elapsed_time": progress_tracker.elapsed_time
+        }
+        
+    except asyncio.CancelledError:
+        return {
+            "error": "Force re-index operation was cancelled",
+            "success": False,
+            "cancelled": True
+        }
+    except Exception as e:
+        if performance_monitor:
+            performance_monitor.log_structured("error", "Force re-index failed", 
+                                             error=str(e), base_path=base_path)
+        return {
+            "error": f"Error during force re-indexing: {e}",
+            "success": False
+        }
+
+@mcp.tool()
 def get_settings_info(ctx: Context) -> Dict[str, Any]:
     """Get information about the project settings."""
     base_path = ctx.request_context.lifespan_context.base_path
@@ -874,6 +1063,39 @@ def clear_settings(ctx: Context) -> str:
     settings = ctx.request_context.lifespan_context.settings
     settings.clear()
     return "Project settings, index, and cache have been cleared."
+
+@mcp.tool()
+def reset_server_state(ctx: Context) -> str:
+    """Completely reset the server state including global variables."""
+    global file_index, lazy_content_manager, memory_profiler, memory_aware_manager, performance_monitor
+    
+    try:
+        # Reset global file_index to empty dict
+        file_index = {}
+        
+        # Clear lazy content manager
+        lazy_content_manager.unload_all()
+        
+        # Reset context to empty state
+        ctx.request_context.lifespan_context.base_path = ""
+        ctx.request_context.lifespan_context.file_count = 0
+        
+        # Create fresh settings with skip_load=True
+        ctx.request_context.lifespan_context.settings = OptimizedProjectSettings("", skip_load=True, storage_backend='sqlite', use_trie_index=True)
+        
+        # Stop memory profiler if running
+        if memory_profiler:
+            try:
+                memory_profiler.stop_monitoring()
+            except:
+                pass
+        memory_profiler = None
+        memory_aware_manager = None
+        performance_monitor = None
+        
+        return "Server state completely reset. All global variables and context cleared."
+    except Exception as e:
+        return f"Error resetting server state: {e}"
 
 @mcp.tool()
 def refresh_search_tools(ctx: Context) -> str:
@@ -1407,6 +1629,13 @@ def set_project() -> list[types.PromptMessage]:
 
 # ----- HELPER FUNCTIONS -----
 
+def _safe_clear_file_index():
+    """Safely clear the file_index regardless of its type."""
+    global file_index
+    
+    # Always reset to empty dictionary to ensure compatibility
+    file_index = {}
+
 async def _index_project_with_progress(base_path: str, progress_tracker: ProgressTracker) -> int:
     """
     Create an index of the project files with progress tracking and cancellation support.
@@ -1426,7 +1655,7 @@ async def _index_project_with_progress(base_path: str, progress_tracker: Progres
     file_count = 0
     filtered_files = 0
     filtered_dirs = 0
-    file_index.clear()
+    _safe_clear_file_index()
     
     try:
         # Initialize configuration manager for filtering
@@ -1815,7 +2044,7 @@ def _index_project(base_path: str) -> int:
     file_count = 0
     filtered_files = 0
     filtered_dirs = 0
-    file_index.clear()
+    _safe_clear_file_index()
     
     # Initialize configuration manager for filtering
     config_manager = ConfigManager()
@@ -1953,7 +2182,6 @@ def _index_project(base_path: str) -> int:
             parallel_indexer = ParallelIndexer()
             
             # Process files in parallel chunks
-            import asyncio
             try:
                 # Run the parallel processing
                 results = asyncio.run(parallel_indexer.process_files(indexing_tasks))
@@ -2127,10 +2355,29 @@ def _index_project(base_path: str) -> int:
     print(f"Indexing completed: {file_count} files indexed, {filtered_files} files filtered, {filtered_dirs} directories filtered")
     return file_count
 
-def _count_files(directory: Dict) -> int:
+def _count_files(directory) -> int:
     """
     Count the number of files in the index.
+    Supports both dict and TrieFileIndex structures.
     """
+    # Check if it's a TrieFileIndex with get_all_files method
+    if hasattr(directory, 'get_all_files'):
+        return len(directory.get_all_files())
+    
+    # Check if it's a TrieFileIndex with __len__ method
+    if hasattr(directory, '__len__') and hasattr(directory, 'root'):
+        return len(directory)
+    
+    # Check if it's a TrieFileIndex but can't call items() on it
+    if hasattr(directory, 'root') and not hasattr(directory, 'items'):
+        # This is a TrieFileIndex, but it doesn't have get_all_files
+        # Try to get its length or return 0
+        return getattr(directory, '_count', 0)
+    
+    # Handle regular dictionary structure
+    if not isinstance(directory, dict):
+        return 0
+        
     count = 0
     for name, value in directory.items():
         if isinstance(value, dict):
@@ -2140,15 +2387,28 @@ def _count_files(directory: Dict) -> int:
                 count += _count_files(value)
     return count
 
-def _get_all_files(directory: Dict, prefix: str = "") -> List[Tuple[str, Dict]]:
-    """Recursively get all files from the index."""
+def _get_all_files(directory, prefix: str = "") -> List[Tuple[str, Dict]]:
+    """Recursively get all files from the index.
+    Supports both dict and TrieFileIndex structures.
+    """
+    # Check if it's a TrieFileIndex
+    if hasattr(directory, 'get_all_files'):
+        return directory.get_all_files()
+    
+    # Handle regular dictionary structure
+    if not isinstance(directory, dict):
+        return []
+        
     all_files = []
     for name, item in directory.items():
         current_path = os.path.join(prefix, name)
-        if item['type'] == 'file':
+        if isinstance(item, dict) and item.get('type') == 'file':
             all_files.append((current_path, item))
-        elif item['type'] == 'directory':
-            all_files.extend(_get_all_files(item['children'], current_path))
+        elif isinstance(item, dict) and item.get('type') == 'directory':
+            all_files.extend(_get_all_files(item.get('children', {}), current_path))
+        elif isinstance(item, dict) and 'type' not in item:
+            # Handle nested directory structure without explicit type
+            all_files.extend(_get_all_files(item, current_path))
     return all_files
 
 def main():
