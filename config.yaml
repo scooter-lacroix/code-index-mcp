@@ -1,0 +1,199 @@
+ignore_patterns:
+  - "**/node_modules/**"
+  - "**/*.tmp"
+  
+size_limits:
+  max_file_size: 1073741824  # 1GB
+  type_specific_limits:
+    ".py": 1073741824  # 1GB for Python files
+
+directory_thresholds:
+  max_files_per_directory: 10000
+  max_subdirectories_per_directory: 1000
+
+memory_caps:
+  soft_limit_mb: 8192  # 8GB
+  hard_limit_mb: 16384  # 16GB
+
+preferred_search_tool: "ripgrep"
+
+# Existing content
+
+# Code Index MCP Configuration
+# This file contains configuration for filtering files and directories during indexing
+
+# File size filtering
+file_filtering:
+  # Maximum file size in bytes (default: 1GB)
+  # Files larger than this will be skipped unless explicitly included
+  max_file_size: 1073741824  # 1GB in bytes
+  
+  # Maximum file size for different file types (optional overrides)
+  type_specific_limits:
+    # Text files can be larger
+    ".md": 1073741824   # 1GB
+    ".txt": 1073741824  # 1GB
+    ".rst": 1073741824  # 1GB
+    # Code files - generous limits for large projects
+    ".py": 1073741824    # 1GB
+    ".js": 1073741824    # 1GB
+    ".ts": 1073741824    # 1GB
+    ".jsx": 1073741824   # 1GB
+    ".tsx": 1073741824   # 1GB
+    ".java": 1073741824  # 1GB
+    ".cpp": 1073741824   # 1GB
+    ".c": 1073741824     # 1GB
+    ".h": 1073741824     # 1GB
+    ".hpp": 1073741824   # 1GB
+    ".go": 1073741824    # 1GB
+    ".rs": 1073741824    # 1GB
+    ".php": 1073741824   # 1GB
+    ".rb": 1073741824    # 1GB
+    ".swift": 1073741824 # 1GB
+    ".kt": 1073741824    # 1GB
+    ".scala": 1073741824 # 1GB
+    # Config files - larger limits
+    ".json": 104857600   # 100MB
+    ".yaml": 104857600   # 100MB
+    ".yml": 104857600    # 100MB
+    ".xml": 104857600    # 100MB
+    ".sql": 104857600    # 100MB
+
+# Directory filtering
+directory_filtering:
+  # Maximum number of files per directory (default: 10000)
+  # Directories with more files will be skipped unless explicitly included
+  max_files_per_directory: 10000
+  
+  # Maximum number of subdirectories per directory (default: 1000)
+  max_subdirectories_per_directory: 1000
+  
+  # Skip directories with these patterns (in addition to standard ignore patterns)
+  skip_large_directories:
+    - "**/node_modules/**"
+    - "**/venv/**"
+    - "**/.venv/**"
+    - "**/env/**"
+    - "**/.env/**"
+    - "**/virtualenv/**"
+    - "**/site-packages/**"
+    - "**/dist/**"
+    - "**/build/**"
+    - "**/target/**"
+    - "**/out/**"
+    - "**/bin/**"
+    - "**/obj/**"
+    - "**/.git/**"
+    - "**/.svn/**"
+    - "**/.hg/**"
+    - "**/coverage/**"
+    - "**/htmlcov/**"
+    - "**/.pytest_cache/**"
+    - "**/.cache/**"
+    - "**/.tox/**"
+    - "**/allure-results/**"
+    - "**/allure-report/**"
+    - "**/logs/**"
+    - "**/log/**"
+    - "**/tmp/**"
+    - "**/temp/**"
+
+# Explicit inclusions (override size/count limits)
+explicit_inclusions:
+  # File patterns to always include regardless of size
+  files: []
+  
+  # Directory patterns to always include regardless of file count
+  directories: []
+  
+  # Specific file extensions to always include
+  extensions: []
+
+# Performance settings
+performance:
+  # Enable parallel processing for large directories
+  parallel_processing: true
+  
+  # Maximum number of worker threads for parallel processing
+  max_workers: 4
+  
+  # Enable caching of directory scans
+  cache_directory_scans: true
+  
+  # Log filtering decisions for debugging
+  log_filtering_decisions: false
+
+# Memory management settings
+memory:
+  # Soft memory limit in MB (triggers cleanup)
+  soft_limit_mb: 8192.0  # 8GB
+  
+  # Hard memory limit in MB (triggers aggressive cleanup)
+  hard_limit_mb: 16384.0  # 16GB
+  
+  # Maximum number of files to keep loaded in memory
+  max_loaded_files: 1000
+  
+  # Maximum number of cached search queries
+  max_cached_queries: 500
+  
+  # Memory threshold for triggering garbage collection (MB)
+  gc_threshold_mb: 2048.0  # 2GB
+  
+  # Memory threshold for spilling data to disk (MB)
+  spill_threshold_mb: 6144.0  # 6GB
+  
+  # Enable continuous memory monitoring
+  enable_monitoring: true
+  
+  # Memory monitoring interval in seconds
+  monitoring_interval: 30.0
+  
+# Enable memory profiling and export
+  enable_profiling: true
+  
+  # Export memory profile on shutdown
+  export_profile_on_shutdown: true
+
+# Performance monitoring configuration
+performance_monitoring:
+  # Enable performance monitoring and metrics collection
+  enable_monitoring: true
+  
+  # Enable structured logging for operations
+  enable_logging: true
+  
+  # Logging level for performance monitoring (DEBUG, INFO, WARNING, ERROR)
+  log_level: "INFO"
+  
+  # Export metrics in JSON format
+  export_json_metrics: true
+  
+  # Export metrics in Prometheus format
+  export_prometheus_metrics: true
+  
+  # Directory to export metrics files
+  metrics_export_directory: "/tmp/code_indexer_metrics"
+  
+  # Export metrics interval in seconds (0 = disabled)
+  metrics_export_interval: 300  # 5 minutes
+  
+  # Custom counters to track
+  custom_counters:
+    - name: "files_skipped_total"
+      description: "Total number of files skipped during indexing"
+      labels:
+        reason: "size_limit"
+    - name: "directories_skipped_total"
+      description: "Total number of directories skipped during indexing"
+      labels:
+        reason: "file_count_limit"
+  
+  # Custom histograms for timing measurements
+  custom_histograms:
+    - name: "database_operation_duration_ms"
+      description: "Duration of database operations in milliseconds"
+      buckets: [1.0, 5.0, 10.0, 50.0, 100.0, 500.0, 1000.0, 5000.0]
+    - name: "file_size_processed_bytes"
+      description: "Size of files processed in bytes"
+      buckets: [1024, 10240, 102400, 1048576, 10485760, 104857600, 1073741824]

@@ -1,6 +1,7 @@
 """
 Search Strategy for ripgrep
 """
+import os
 import shutil
 import subprocess
 from typing import Dict, List, Optional, Tuple
@@ -35,7 +36,7 @@ class RipgrepStrategy(SearchStrategy):
         safe fuzzy pattern with word boundaries is used for regex search.
         When fuzzy=False, a literal string search is performed with --fixed-strings.
         """
-        cmd = ['rg', '--line-number', '--no-heading', '--color=never']
+        cmd = ['rg', '--line-number', '--no-heading', '--color=never', '--threads', str(os.cpu_count())]
 
         if not case_sensitive:
             cmd.append('--ignore-case')

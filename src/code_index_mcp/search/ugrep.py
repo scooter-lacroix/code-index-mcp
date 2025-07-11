@@ -1,6 +1,7 @@
 """
 Search Strategy for ugrep
 """
+import os
 import shutil
 import subprocess
 from typing import Dict, List, Optional, Tuple
@@ -34,7 +35,7 @@ class UgrepStrategy(SearchStrategy):
         if not self.is_available():
             return {"error": "ugrep (ug) command not found."}
 
-        cmd = ['ug', '--line-number', '--no-heading']
+        cmd = ['ug', '--line-number', '--no-heading', '--threads', str(os.cpu_count() or 1)]
 
         if fuzzy:
             cmd.append('--fuzzy') # Enable fuzzy search (long form for clarity)

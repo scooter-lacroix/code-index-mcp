@@ -14,8 +14,9 @@ import subprocess
 from datetime import datetime
 
 from .constants import (
-    SETTINGS_DIR, CONFIG_FILE, INDEX_FILE, CACHE_FILE
+    SETTINGS_DIR, CONFIG_FILE, INDEX_FILE, CACHE_FILE, METADATA_FILE
 )
+from .config_manager import ConfigManager
 from .search.base import SearchStrategy
 from .search.ugrep import UgrepStrategy
 from .search.ripgrep import RipgrepStrategy
@@ -193,6 +194,18 @@ class ProjectSettings:
             print(f"Error getting cache path: {e}")
             # If error occurs, use file in current directory as fallback
             return os.path.join(os.getcwd(), CACHE_FILE)
+
+    def get_metadata_path(self):
+        """Get the path to the metadata file"""
+        try:
+            path = os.path.join(self.settings_path, METADATA_FILE)
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            return path
+        except Exception as e:
+            print(f"Error getting metadata path: {e}")
+            # If error occurs, use file in current directory as fallback
+            return os.path.join(os.getcwd(), METADATA_FILE)
 
     def _get_timestamp(self):
         """Get current timestamp"""
@@ -416,6 +429,89 @@ class ProjectSettings:
             print(f"Error in load_cache: {e}")
             return {}
 
+    def save_metadata(self, metadata):
+        """Save file metadata
+
+        Args:
+            metadata (dict): File metadata data containing timestamps and hashes
+        """
+        try:
+            metadata_path = self.get_metadata_path()
+            print(f"Saving metadata to: {metadata_path}")
+
+            # Ensure directory exists
+            dir_path = os.path.dirname(metadata_path)
+            if not os.path.exists(dir_path):
+                print(f"Creating directory: {dir_path}")
+                os.makedirs(dir_path, exist_ok=True)
+
+            # Check if directory is writable
+            if not os.access(dir_path, os.W_OK):
+                print(f"Warning: Directory is not writable: {dir_path}")
+                # Use current directory as fallback
+                metadata_path = os.path.join(os.getcwd(), METADATA_FILE)
+                print(f"Using fallback path: {metadata_path}")
+
+            with open(metadata_path, 'wb') as f:
+                pickle.dump(metadata, f)
+
+            print(f"Metadata saved successfully to: {metadata_path}")
+        except Exception as e:
+            print(f"Error saving metadata: {e}")
+            # Try saving to current directory
+            try:
+                fallback_path = os.path.join(os.getcwd(), METADATA_FILE)
+                print(f"Trying fallback path: {fallback_path}")
+                with open(fallback_path, 'wb') as f:
+                    pickle.dump(metadata, f)
+                print(f"Metadata saved to fallback path: {fallback_path}")
+            except Exception as e2:
+                print(f"Error saving metadata to fallback path: {e2}")
+
+    def load_metadata(self):
+        """Load file metadata
+
+        Returns:
+            dict: File metadata data, or empty dict if file doesn't exist
+        """
+        # If skip_load is set, return empty dict directly
+        if self.skip_load:
+            return {}
+
+        try:
+            metadata_path = self.get_metadata_path()
+
+            if os.path.exists(metadata_path):
+                try:
+                    with open(metadata_path, 'rb') as f:
+                        metadata = pickle.load(f)
+                    print(f"Metadata loaded successfully from: {metadata_path}")
+                    return metadata
+                except (pickle.PickleError, EOFError) as e:
+                    print(f"Error parsing metadata file: {e}")
+                    # If file is corrupted, return empty dict
+                    return {}
+                except Exception as e:
+                    print(f"Unexpected error loading metadata: {e}")
+                    return {}
+            else:
+                # Try loading from current directory
+                fallback_path = os.path.join(os.getcwd(), METADATA_FILE)
+                if os.path.exists(fallback_path):
+                    print(f"Trying fallback path: {fallback_path}")
+                    try:
+                        with open(fallback_path, 'rb') as f:
+                            metadata = pickle.load(f)
+                        print(f"Metadata loaded from fallback path: {fallback_path}")
+                        return metadata
+                    except Exception as e:
+                        print(f"Error loading metadata from fallback path: {e}")
+
+            return {}
+        except Exception as e:
+            print(f"Error in load_metadata: {e}")
+            return {}
+
     def clear(self):
         """Clear all settings and cache files"""
         try:
@@ -475,7 +571,7 @@ class ProjectSettings:
                     stats['all_files'] = all_files
 
                     # Get details for specific files
-                    for filename in [CONFIG_FILE, INDEX_FILE, CACHE_FILE]:
+                    for filename in [CONFIG_FILE, INDEX_FILE, CACHE_FILE, METADATA_FILE]:
                         file_path = os.path.join(self.settings_path, filename)
                         if os.path.exists(file_path):
                             try:
@@ -540,3 +636,20 @@ class ProjectSettings:
         print("Refreshing available search strategies...")
         self.available_strategies = _get_available_strategies()
         print(f"Available strategies found: {[s.name for s in self.available_strategies]}")
+    
+    def get_config_manager(self) -> ConfigManager:
+        """Get ConfigManager instance with project-specific overrides.
+        
+        Returns:
+            ConfigManager: Configured instance with project path for overrides
+        """
+        return ConfigManager(project_path=self.base_path)
+    
+    def get_effective_config(self) -> dict:
+        """Get the effective configuration with project overrides applied.
+        
+        Returns:
+            dict: Merged configuration with project overrides
+        """
+        config_manager = self.get_config_manager()
+        return config_manager.get_config()

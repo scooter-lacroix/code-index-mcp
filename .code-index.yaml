@@ -1,0 +1,33 @@
+# Project-specific configuration overrides for code-index-mcp
+# This file demonstrates how to override settings for this specific project
+
+# Override preferred search tool for this project
+preferred_search_tool: "ugrep"
+
+# Override ignore patterns for this project
+ignore_patterns:
+  - "**/node_modules/**"
+  - "**/*.tmp"
+  - "**/venv/**"
+  - "**/.pytest_cache/**"
+  - "**/build/**"
+  - "**/dist/**"
+  - "**/__pycache__/**"
+  - "**/.git/**"
+
+# Override size limits for this project
+size_limits:
+  max_file_size: 2147483648  # 2GB for this project
+  type_specific_limits:
+    ".py": 52428800    # 50MB for Python files in this project
+    ".md": 104857600   # 100MB for markdown files
+
+# Override directory thresholds for this project
+directory_thresholds:
+  max_files_per_directory: 5000
+  max_subdirectories_per_directory: 500
+
+# Override memory caps for this project
+memory_caps:
+  soft_limit_mb: 4096   # 4GB
+  hard_limit_mb: 8192   # 8GB

@@ -9,8 +9,10 @@ import re
 import shutil
 import subprocess
 import sys
+import asyncio
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple, Any, Callable
+from concurrent.futures import ThreadPoolExecutor
 
 def parse_search_output(output: str, base_path: str) -> Dict[str, List[Tuple[int, str]]]:
     """
@@ -138,4 +140,163 @@ class SearchStrategy(ABC):
             A dictionary mapping filenames to lists of (line_number, line_content) tuples.
         """
         pass
+
+    def search_multiple(
+        self,
+        patterns: List[str],
+        base_path: str,
+        case_sensitive: bool = True,
+        context_lines: int = 0,
+        file_pattern: Optional[str] = None,
+        fuzzy: bool = False,
+        scope_path: Optional[str] = None
+    ) -> Dict[str, Dict[str, List[Tuple[int, str]]]]:
+        """
+        Execute concurrent searches for multiple patterns.
+
+        Args:
+            patterns: List of search patterns.
+            base_path: The root directory to search in.
+            case_sensitive: Whether the search is case-sensitive.
+            context_lines: Number of context lines to show around each match.
+            file_pattern: Glob pattern to filter files (e.g., "*.py").
+            fuzzy: Whether to enable fuzzy search.
+            scope_path: Optional subdirectory to limit search scope.
+
+        Returns:
+            A dictionary mapping pattern to search results.
+        """
+        import concurrent.futures
+        import threading
+        
+        # Determine search path
+        search_path = os.path.join(base_path, scope_path) if scope_path else base_path
+        
+        # Use ThreadPoolExecutor for concurrent searches
+        results = {}
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(patterns), os.cpu_count() or 1)) as executor:
+            # Submit all search tasks
+            future_to_pattern = {
+                executor.submit(
+                    self.search,
+                    pattern,
+                    search_path,
+                    case_sensitive,
+                    context_lines,
+                    file_pattern,
+                    fuzzy
+                ): pattern
+                for pattern in patterns
+            }
+            
+            # Collect results as they complete
+            for future in concurrent.futures.as_completed(future_to_pattern):
+                pattern = future_to_pattern[future]
+                try:
+                    result = future.result()
+                    results[pattern] = result
+                except Exception as e:
+                    results[pattern] = {"error": f"Search failed for pattern '{pattern}': {str(e)}"}
+        
+        return results
+    
+    # Async methods for non-blocking search operations
+    
+    async def search_async(
+        self,
+        pattern: str,
+        base_path: str,
+        case_sensitive: bool = True,
+        context_lines: int = 0,
+        file_pattern: Optional[str] = None,
+        fuzzy: bool = False,
+        progress_callback: Optional[Callable[[float], None]] = None
+    ) -> Dict[str, List[Tuple[int, str]]]:
+        """
+        Execute an async search using the specific strategy.
+        
+        Args:
+            pattern: The search pattern (string or regex).
+            base_path: The root directory to search in.
+            case_sensitive: Whether the search is case-sensitive.
+            context_lines: Number of context lines to show around each match.
+            file_pattern: Glob pattern to filter files (e.g., "*.py").
+            fuzzy: Whether to enable fuzzy search.
+            progress_callback: Optional callback for progress updates.
+            
+        Returns:
+            A dictionary mapping filenames to lists of (line_number, line_content) tuples.
+        """
+        # Default implementation runs synchronous search in thread pool
+        loop = asyncio.get_event_loop()
+        
+        def run_search():
+            if progress_callback:
+                progress_callback(0.0)
+            
+            result = self.search(
+                pattern, base_path, case_sensitive, context_lines, file_pattern, fuzzy
+            )
+            
+            if progress_callback:
+                progress_callback(1.0)
+            
+            return result
+        
+        return await loop.run_in_executor(None, run_search)
+    
+    async def search_multiple_async(
+        self,
+        patterns: List[str],
+        base_path: str,
+        case_sensitive: bool = True,
+        context_lines: int = 0,
+        file_pattern: Optional[str] = None,
+        fuzzy: bool = False,
+        scope_path: Optional[str] = None,
+        progress_callback: Optional[Callable[[str, float], None]] = None
+    ) -> Dict[str, Dict[str, List[Tuple[int, str]]]]:
+        """
+        Execute concurrent async searches for multiple patterns.
+        
+        Args:
+            patterns: List of search patterns.
+            base_path: The root directory to search in.
+            case_sensitive: Whether the search is case-sensitive.
+            context_lines: Number of context lines to show around each match.
+            file_pattern: Glob pattern to filter files (e.g., "*.py").
+            fuzzy: Whether to enable fuzzy search.
+            scope_path: Optional subdirectory to limit search scope.
+            progress_callback: Optional callback for progress updates per pattern.
+            
+        Returns:
+            A dictionary mapping pattern to search results.
+        """
+        # Determine search path
+        search_path = os.path.join(base_path, scope_path) if scope_path else base_path
+        
+        # Create tasks for all patterns
+        async def search_single_pattern(pattern: str) -> Tuple[str, Dict[str, List[Tuple[int, str]]]]:
+            def single_progress_callback(progress: float):
+                if progress_callback:
+                    progress_callback(pattern, progress)
+            
+            try:
+                result = await self.search_async(
+                    pattern, search_path, case_sensitive, context_lines,
+                    file_pattern, fuzzy, single_progress_callback
+                )
+                return pattern, result
+            except Exception as e:
+                return pattern, {"error": f"Search failed for pattern '{pattern}': {str(e)}"}
+        
+        # Execute all searches concurrently
+        tasks = [search_single_pattern(pattern) for pattern in patterns]
+        results = {}
+        
+        for task in asyncio.as_completed(tasks):
+            pattern, result = await task
+            results[pattern] = result
+        
+        return results
 
