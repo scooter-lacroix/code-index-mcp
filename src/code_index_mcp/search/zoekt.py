@@ -117,13 +117,16 @@ class ZoektStrategy(SearchStrategy):
         # Check if index already exists and is up to date
         index_files = [f for f in os.listdir(self.index_dir) if f.endswith('.zoekt')]
         if index_files and self._index_initialized:
+            print(f"Using existing Zoekt index with {len(index_files)} shard(s)")
             return True
         
         try:
-            # Create index using zoekt-index
+            print(f"Creating Zoekt index for {base_path}...")
+            # Create index using zoekt-index with correct syntax
             cmd = [
                 self._zoekt_index_path,
                 "-index", self.index_dir,
+                "-parallelism", "2",  # Limit parallelism for stability
                 base_path
             ]
             
@@ -136,12 +139,24 @@ class ZoektStrategy(SearchStrategy):
             
             if result.returncode == 0:
                 self._index_initialized = True
-                return True
+                # Verify index was created
+                index_files = [f for f in os.listdir(self.index_dir) if f.endswith('.zoekt')]
+                if index_files:
+                    print(f"Zoekt index created successfully with {len(index_files)} shard(s)")
+                    return True
+                else:
+                    print("Zoekt indexing completed but no index files found")
+                    return False
             else:
-                print(f"Zoekt indexing failed: {result.stderr}")
+                print(f"Zoekt indexing failed with return code {result.returncode}")
+                print(f"STDOUT: {result.stdout}")
+                print(f"STDERR: {result.stderr}")
                 return False
                 
-        except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
+        except subprocess.TimeoutExpired:
+            print("Zoekt indexing timed out after 5 minutes")
+            return False
+        except (FileNotFoundError, OSError) as e:
             print(f"Error creating Zoekt index: {e}")
             return False
     

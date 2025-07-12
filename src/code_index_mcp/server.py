@@ -444,11 +444,13 @@ async def search_code_advanced(
     settings = ctx.request_context.lifespan_context.settings
     # Use global lazy_content_manager for now
     global lazy_content_manager
-    strategy = settings.get_preferred_search_tool()
-
-    if not strategy:
+    
+    # Get all available strategies in priority order for fallback
+    all_strategies = settings.available_strategies
+    if not all_strategies:
         return {"error": "No search strategies available. This is unexpected."}
-
+    
+    strategy = all_strategies[0]  # Start with the highest priority strategy
     print(f"Using search strategy: {strategy.name}")
 
     # Create query key for caching
@@ -466,18 +468,84 @@ async def search_code_advanced(
     if performance_monitor:
         performance_monitor.increment_counter("search_cache_misses_total")
 
-    # Use performance monitoring context manager for timing
-    if performance_monitor:
-        with performance_monitor.time_operation("search", 
-                                               pattern=pattern, 
-                                               strategy=strategy.name,
-                                               file_pattern=file_pattern,
-                                               case_sensitive=case_sensitive,
-                                               fuzzy=fuzzy) as operation:
+    # Try each strategy in order until one succeeds
+    last_error = None
+    
+    for strategy_index, strategy in enumerate(all_strategies):
+        print(f"Trying search strategy {strategy_index + 1}/{len(all_strategies)}: {strategy.name}")
+        
+        # Use performance monitoring context manager for timing
+        if performance_monitor:
+            with performance_monitor.time_operation("search", 
+                                                   pattern=pattern, 
+                                                   strategy=strategy.name,
+                                                   file_pattern=file_pattern,
+                                                   case_sensitive=case_sensitive,
+                                                   fuzzy=fuzzy,
+                                                   attempt=strategy_index + 1) as operation:
+                try:
+                    # Use async search with progress callback
+                    def progress_callback(progress: float):
+                        print(f"Search progress ({strategy.name}): {progress:.1%}")
+                    
+                    results = await strategy.search_async(
+                        pattern=pattern,
+                        base_path=base_path,
+                        case_sensitive=case_sensitive,
+                        context_lines=context_lines,
+                        file_pattern=file_pattern,
+                        fuzzy=fuzzy,
+                        progress_callback=progress_callback
+                    )
+                    
+                    # Count results for metrics
+                    total_matches = sum(len(matches) for matches in results.values())
+                    operation.metadata.update({
+                        "files_searched": len(results),
+                        "total_matches": total_matches
+                    })
+                    
+                    paginated_results = lazy_content_manager.paginate_results(results, page, page_size)
+                    lazy_content_manager.cache_search_result(query_key, paginated_results)
+                    print(f"Search successful with {strategy.name}. Cached result for query: {query_key}")
+                    
+                    # Log successful search
+                    performance_monitor.log_structured("info", "Search completed successfully", 
+                                                      pattern=pattern, 
+                                                      strategy=strategy.name,
+                                                      files_searched=len(results),
+                                                      total_matches=total_matches,
+                                                      duration_ms=operation.duration_ms,
+                                                      attempt=strategy_index + 1)
+                    return paginated_results
+                except Exception as e:
+                    last_error = e
+                    # Log search error but continue to next strategy
+                    performance_monitor.log_structured("warning", "Search strategy failed, trying next", 
+                                                      pattern=pattern, 
+                                                      strategy=strategy.name,
+                                                      error=str(e),
+                                                      attempt=strategy_index + 1)
+                    performance_monitor.increment_counter("search_strategy_failures_total")
+                    
+                    # If this isn't the last strategy, continue to the next one
+                    if strategy_index < len(all_strategies) - 1:
+                        print(f"Search failed with {strategy.name}: {e}. Trying next strategy...")
+                        continue
+                    else:
+                        # This was the last strategy, return error
+                        performance_monitor.log_structured("error", "All search strategies failed", 
+                                                          pattern=pattern, 
+                                                          error=str(e),
+                                                          total_attempts=len(all_strategies))
+                        performance_monitor.increment_counter("search_errors_total")
+                        return {"error": f"All search strategies failed. Last error from '{strategy.name}': {e}"}
+        else:
+            # Fallback without monitoring - same logic but without performance tracking
             try:
                 # Use async search with progress callback
                 def progress_callback(progress: float):
-                    print(f"Search progress: {progress:.1%}")
+                    print(f"Search progress ({strategy.name}): {progress:.1%}")
                 
                 results = await strategy.search_async(
                     pattern=pattern,
@@ -489,56 +557,22 @@ async def search_code_advanced(
                     progress_callback=progress_callback
                 )
                 
-                # Count results for metrics
-                total_matches = sum(len(matches) for matches in results.values())
-                operation.metadata.update({
-                    "files_searched": len(results),
-                    "total_matches": total_matches
-                })
-                
                 paginated_results = lazy_content_manager.paginate_results(results, page, page_size)
                 lazy_content_manager.cache_search_result(query_key, paginated_results)
-                print(f"Cached new result for query: {query_key}")
-                
-                # Log successful search
-                performance_monitor.log_structured("info", "Search completed successfully", 
-                                                  pattern=pattern, 
-                                                  strategy=strategy.name,
-                                                  files_searched=len(results),
-                                                  total_matches=total_matches,
-                                                  duration_ms=operation.duration_ms)
+                print(f"Search successful with {strategy.name}. Cached result for query: {query_key}")
                 return paginated_results
             except Exception as e:
-                # Log search error
-                performance_monitor.log_structured("error", "Search failed", 
-                                                  pattern=pattern, 
-                                                  strategy=strategy.name,
-                                                  error=str(e))
-                performance_monitor.increment_counter("search_errors_total")
-                return {"error": f"Search failed using '{strategy.name}': {e}"}
-    else:
-        # Fallback without monitoring
-        try:
-            # Use async search with progress callback
-            def progress_callback(progress: float):
-                print(f"Search progress: {progress:.1%}")
-            
-            results = await strategy.search_async(
-                pattern=pattern,
-                base_path=base_path,
-                case_sensitive=case_sensitive,
-                context_lines=context_lines,
-                file_pattern=file_pattern,
-                fuzzy=fuzzy,
-                progress_callback=progress_callback
-            )
-            
-            paginated_results = lazy_content_manager.paginate_results(results, page, page_size)
-            lazy_content_manager.cache_search_result(query_key, paginated_results)
-            print(f"Cached new result for query: {query_key}")
-            return paginated_results
-        except Exception as e:
-            return {"error": f"Search failed using '{strategy.name}': {e}"}
+                last_error = e
+                # If this isn't the last strategy, continue to the next one
+                if strategy_index < len(all_strategies) - 1:
+                    print(f"Search failed with {strategy.name}: {e}. Trying next strategy...")
+                    continue
+                else:
+                    # This was the last strategy, return error
+                    return {"error": f"All search strategies failed. Last error from '{strategy.name}': {e}"}
+    
+    # This should never be reached, but just in case
+    return {"error": f"Unexpected error: no strategies were attempted. Last error: {last_error}"}
 @mcp.tool()
 def find_files(pattern: str, ctx: Context) -> List[str]:
     """Find files in the project matching a specific glob pattern."""

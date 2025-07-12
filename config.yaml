@@ -8,12 +8,12 @@ size_limits:
     ".py": 1073741824  # 1GB for Python files
 
 directory_thresholds:
-  max_files_per_directory: 10000
-  max_subdirectories_per_directory: 1000
+  max_files_per_directory: 1000000  # 1M files - Increased for massive codebases (600K+ files)
+  max_subdirectories_per_directory: 50000  # 50K subdirs - Increased for extremely complex project structures
 
 memory_caps:
-  soft_limit_mb: 8192  # 8GB
-  hard_limit_mb: 16384  # 16GB
+  soft_limit_mb: 16384  # 16GB - Increased for massive projects (44GB+, 600K+ files)
+  hard_limit_mb: 32768  # 32GB - Increased for extremely large projects
 
 preferred_search_tool: "ripgrep"
 
@@ -61,12 +61,12 @@ file_filtering:
 
 # Directory filtering
 directory_filtering:
-  # Maximum number of files per directory (default: 10000)
+  # Maximum number of files per directory (increased for massive codebases)
   # Directories with more files will be skipped unless explicitly included
-  max_files_per_directory: 10000
+  max_files_per_directory: 1000000  # 1M files - handles massive projects with 600K+ files
   
-  # Maximum number of subdirectories per directory (default: 1000)
-  max_subdirectories_per_directory: 1000
+  # Maximum number of subdirectories per directory (increased for extremely complex projects)
+  max_subdirectories_per_directory: 50000  # 50K subdirs - handles complex project structures
   
   # Skip directories with these patterns (in addition to standard ignore patterns)
   skip_large_directories:
@@ -115,7 +115,7 @@ performance:
   parallel_processing: true
   
   # Maximum number of worker threads for parallel processing
-  max_workers: 4
+  max_workers: 8  # Increased for massive projects with 600K+ files
   
   # Enable caching of directory scans
   cache_directory_scans: true
@@ -126,22 +126,22 @@ performance:
 # Memory management settings
 memory:
   # Soft memory limit in MB (triggers cleanup)
-  soft_limit_mb: 8192.0  # 8GB
+  soft_limit_mb: 16384.0  # 16GB - Increased for massive projects
   
   # Hard memory limit in MB (triggers aggressive cleanup)
-  hard_limit_mb: 16384.0  # 16GB
+  hard_limit_mb: 32768.0  # 32GB - Increased for extremely large projects
   
   # Maximum number of files to keep loaded in memory
-  max_loaded_files: 1000
+  max_loaded_files: 2000  # Increased for massive projects
   
   # Maximum number of cached search queries
-  max_cached_queries: 500
+  max_cached_queries: 1000  # Increased for massive projects
   
   # Memory threshold for triggering garbage collection (MB)
-  gc_threshold_mb: 2048.0  # 2GB
+  gc_threshold_mb: 4096.0  # 4GB - Increased for massive projects
   
   # Memory threshold for spilling data to disk (MB)
-  spill_threshold_mb: 6144.0  # 6GB
+  spill_threshold_mb: 12288.0  # 12GB - Increased for massive projects
   
   # Enable continuous memory monitoring
   enable_monitoring: true
