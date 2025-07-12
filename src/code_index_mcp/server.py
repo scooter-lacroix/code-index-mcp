@@ -1847,10 +1847,7 @@ async def _index_project_with_progress(base_path: str, progress_tracker: Progres
                         )
                     
                     # Run the parallel processing
-                    results = await parallel_indexer.process_files_with_progress(
-                        indexing_tasks, 
-                        progress_callback=progress_callback
-                    )
+                    results = await parallel_indexer.process_files(indexing_tasks)
                     
                     progress_tracker.cancellation_token.check_cancelled()
                     
