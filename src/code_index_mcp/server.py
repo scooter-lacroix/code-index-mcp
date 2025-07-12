@@ -1842,7 +1842,7 @@ async def _index_project_with_progress(base_path: str, progress_tracker: Progres
                         progress_tracker.cancellation_token.check_cancelled()
                         progress_percent = (completed / total) * 100 if total > 0 else 0
                         await progress_tracker.update_progress(
-                            items_completed=completed,
+                            items_processed=completed - progress_tracker.items_processed,
                             message=f"Processed {completed}/{total} files ({progress_percent:.1f}%)"
                         )
                     
@@ -1946,7 +1946,7 @@ async def _index_project_with_progress(base_path: str, progress_tracker: Progres
                         if processed_files % 10 == 0:
                             progress_percent = (processed_files / len(changed_files)) * 100
                             await progress_tracker.update_progress(
-                                items_completed=processed_files,
+                                items_processed=1,
                                 message=f"Sequential processing: {processed_files}/{len(changed_files)} files ({progress_percent:.1f}%)"
                             )
             else:
