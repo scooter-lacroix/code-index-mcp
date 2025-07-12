@@ -1980,7 +1980,7 @@ async def _index_project_with_progress(base_path: str, progress_tracker: Progres
                                                   files_indexed=file_count,
                                                   files_filtered=filtered_files,
                                                   directories_filtered=filtered_dirs,
-                                                  duration_ms=indexing_context.duration_ms)
+                                                  duration_ms=getattr(indexing_context, 'duration_ms', 0))
                 
                 # Increment success counter
                 performance_monitor.increment_counter("indexing_operations_total")
@@ -2333,7 +2333,7 @@ def _index_project(base_path: str) -> int:
                                               files_indexed=file_count,
                                               files_filtered=filtered_files,
                                               directories_filtered=filtered_dirs,
-                                              duration_ms=indexing_context.duration_ms)
+                                              duration_ms=getattr(indexing_context, 'duration_ms', 0))
             
             # Increment success counter
             performance_monitor.increment_counter("indexing_operations_total")

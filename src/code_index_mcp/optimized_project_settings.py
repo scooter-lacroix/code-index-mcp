@@ -345,12 +345,28 @@ class OptimizedProjectSettings:
         """Clear all settings and cache files."""
         try:
             if self.storage_backend == 'sqlite':
-                # Clear SQLite storage
-                self.cache_storage.clear()
-                self.metadata_storage.clear()
-                if hasattr(self.file_index, 'clear'):
-                    self.file_index.clear()
-                print("SQLite storage cleared")
+                # For SQLite, it's safer to delete the database files and recreate storage objects
+                print("Clearing SQLite storage...")
+                
+                # Close existing storage objects
+                if hasattr(self.cache_storage, 'close'):
+                    self.cache_storage.close()
+                if hasattr(self.metadata_storage, 'close'):
+                    self.metadata_storage.close()
+                if hasattr(self.file_index, 'close'):
+                    self.file_index.close()
+                
+                # Delete database files
+                if os.path.exists(self.settings_path):
+                    for filename in os.listdir(self.settings_path):
+                        file_path = os.path.join(self.settings_path, filename)
+                        if os.path.isfile(file_path) and filename.endswith('.db'):
+                            os.unlink(file_path)
+                            print(f"Deleted database file: {file_path}")
+                
+                # Recreate storage objects with fresh databases
+                self._init_storage_backend()
+                print("SQLite storage cleared and reinitialized")
             else:
                 # Clear memory-based storage
                 self.cache_storage.clear()
@@ -361,13 +377,13 @@ class OptimizedProjectSettings:
                     self.file_index = {}
                 print("Memory storage cleared")
             
-            # Also clear any legacy files
+            # Also clear any remaining legacy files
             if os.path.exists(self.settings_path):
                 for filename in os.listdir(self.settings_path):
                     file_path = os.path.join(self.settings_path, filename)
-                    if os.path.isfile(file_path):
+                    if os.path.isfile(file_path) and not filename.endswith('.db'):
                         os.unlink(file_path)
-                        print(f"Deleted file: {file_path}")
+                        print(f"Deleted legacy file: {file_path}")
         except Exception as e:
             print(f"Error clearing settings: {e}")
     

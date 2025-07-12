@@ -211,17 +211,20 @@ class PerformanceMonitor:
             
             # Log successful operation
             if self.enable_logging:
+                # Safely get duration_ms after finish() is called
+                duration = getattr(operation, 'duration_ms', 0) or 0
                 self.logger.info(
                     f"Operation completed successfully",
                     extra={
                         "operation_name": operation_name,
-                        "duration_ms": operation.duration_ms,
+                        "duration_ms": duration,
                         "metadata": metadata
                     }
                 )
             
             # Update metrics
-            self.observe_histogram(f"{operation_name}_duration_ms", operation.duration_ms)
+            duration = getattr(operation, 'duration_ms', 0) or 0
+            self.observe_histogram(f"{operation_name}_duration_ms", duration)
             self.increment_counter(f"{operation_name}_operations_total")
             
         except Exception as e:
@@ -229,11 +232,13 @@ class PerformanceMonitor:
             
             # Log failed operation
             if self.enable_logging:
+                # Safely get duration_ms after finish() is called
+                duration = getattr(operation, 'duration_ms', 0) or 0
                 self.logger.error(
                     f"Operation failed",
                     extra={
                         "operation_name": operation_name,
-                        "duration_ms": operation.duration_ms,
+                        "duration_ms": duration,
                         "error_message": str(e),
                         "metadata": metadata
                     },
@@ -283,13 +288,15 @@ class PerformanceMonitor:
         
         # Log operation completion
         if self.enable_logging:
+            # Safely get duration_ms
+            duration = getattr(operation, 'duration_ms', 0) or 0
             if success:
                 self.logger.info(
                     f"Operation completed successfully",
                     extra={
                         "operation_name": operation.operation_name,
                         "operation_id": operation_id,
-                        "duration_ms": operation.duration_ms,
+                        "duration_ms": duration,
                         "metadata": operation.metadata
                     }
                 )
@@ -299,14 +306,15 @@ class PerformanceMonitor:
                     extra={
                         "operation_name": operation.operation_name,
                         "operation_id": operation_id,
-                        "duration_ms": operation.duration_ms,
+                        "duration_ms": duration,
                         "error_message": error_message,
                         "metadata": operation.metadata
                     }
                 )
         
         # Update metrics
-        self.observe_histogram(f"{operation.operation_name}_duration_ms", operation.duration_ms)
+        duration = getattr(operation, 'duration_ms', 0) or 0
+        self.observe_histogram(f"{operation.operation_name}_duration_ms", duration)
         if success:
             self.increment_counter(f"{operation.operation_name}_operations_total")
         else:

@@ -205,11 +205,21 @@ class SQLiteStorage(StorageInterface):
         try:
             with sqlite3.connect(self.db_path) as conn:
                 conn.execute('DELETE FROM kv_store')
+                if self.enable_fts:
+                    conn.execute('DELETE FROM kv_fts')
                 conn.commit()
+                # Ensure tables are properly initialized after clearing
+                self._init_db()
                 return True
         except Exception as e:
             print(f"Error clearing data: {e}")
-            return False
+            # Try to reinitialize the database in case of schema issues
+            try:
+                self._init_db()
+                return True
+            except Exception as init_e:
+                print(f"Error reinitializing database after clear: {init_e}")
+                return False
     
     def size(self) -> int:
         """Get the number of stored items."""
@@ -506,6 +516,36 @@ class SQLiteFileIndex(FileIndexInterface):
         except Exception as e:
             print(f"Error getting all files: {e}")
             return []
+    
+    def clear(self) -> bool:
+        """Clear all files from the index."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute('DELETE FROM files')
+                conn.execute('DELETE FROM files_fts')
+                conn.commit()
+                # Ensure tables are properly initialized after clearing
+                self._init_db()
+                return True
+        except Exception as e:
+            print(f"Error clearing file index: {e}")
+            # Try to reinitialize the database in case of schema issues
+            try:
+                self._init_db()
+                return True
+            except Exception as init_e:
+                print(f"Error reinitializing file index after clear: {init_e}")
+                return False
+    
+    def size(self) -> int:
+        """Get the number of files in the index."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute('SELECT COUNT(*) FROM files')
+                return cursor.fetchone()[0]
+        except Exception as e:
+            print(f"Error getting file index size: {e}")
+            return 0
     
     def close(self) -> None:
         """Close the storage backend."""
