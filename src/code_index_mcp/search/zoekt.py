@@ -89,14 +89,15 @@ class ZoektStrategy(SearchStrategy):
             if not self._zoekt_path or not self._zoekt_index_path:
                 return False
             
-            # Test if we can run zoekt
+            # Test if we can run zoekt (zoekt returns non-zero for help, but that's OK)
             result = subprocess.run(
-                [self._zoekt_path, "--help"],
+                [self._zoekt_path],
                 capture_output=True,
                 text=True,
                 timeout=5
             )
-            return result.returncode == 0
+            # zoekt without arguments shows usage and returns 2, which means it's working
+            return result.returncode in [0, 2]
         except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
             return False
     
@@ -175,39 +176,54 @@ class ZoektStrategy(SearchStrategy):
             raise RuntimeError("Failed to create or access Zoekt index")
         
         try:
-            # Build zoekt command with parallel and scoped search
-            cmd = [self._zoekt_path, "-index_dir", self.index_dir, "--parallelism", str(os.cpu_count())]
+            # Build zoekt command
+            cmd = [self._zoekt_path, "-index_dir", self.index_dir]
             
-            # Add case sensitivity flag
-            if not case_sensitive:
-                cmd.append("-i")
+            # Note: zoekt doesn't support case insensitive search or context lines
+            # These features are built into the search engine itself
             
-            # Add context lines
-            if context_lines > 0:
-                cmd.extend(["-A", str(context_lines), "-B", str(context_lines)])
+            # Construct the search query with file pattern if specified
+            search_query = pattern
             
-            # Add file pattern if specified
+            # Add file pattern if specified using zoekt's file: syntax
             if file_pattern:
-                # Convert glob pattern to regex for Zoekt
                 if file_pattern.startswith("*."):
-                    # Simple extension pattern
+                    # Simple extension pattern - zoekt uses file:ext syntax
                     ext = file_pattern[2:]
-                    cmd.extend(["-f", f".*\\.{ext}$"])
+                    search_query = f"file:{ext} {pattern}"
                 else:
-                    # More complex pattern - convert to regex
-                    import fnmatch
-                    regex_pattern = fnmatch.translate(file_pattern)
-                    cmd.extend(["-f", regex_pattern])
+                    # For more complex patterns, we'll still try to use file: syntax
+                    if "*" in file_pattern:
+                        # Try to extract extension from glob pattern
+                        if file_pattern.endswith("*"):
+                            base = file_pattern[:-1]
+                            search_query = f"file:{base} {pattern}"
+                        else:
+                            # Complex pattern, use as-is
+                            search_query = pattern
+                    else:
+                        # Exact filename match
+                        search_query = f"file:{file_pattern} {pattern}"
             
             # Add the search pattern
             if fuzzy:
                 # For fuzzy search, treat as regex
-                cmd.append(pattern)
+                cmd.append(search_query)
             else:
-                # For literal search, escape special regex characters
+                # For literal search, escape special regex characters in the pattern part only
                 import re
-                escaped_pattern = re.escape(pattern)
-                cmd.append(escaped_pattern)
+                if file_pattern:
+                    # Split the query and escape only the pattern part
+                    parts = search_query.split(' ', 1)
+                    if len(parts) == 2:
+                        file_part, pattern_part = parts
+                        escaped_pattern = re.escape(pattern_part)
+                        cmd.append(f"{file_part} {escaped_pattern}")
+                    else:
+                        cmd.append(search_query)
+                else:
+                    escaped_pattern = re.escape(search_query)
+                    cmd.append(escaped_pattern)
             
             # Execute search
             result = subprocess.run(
