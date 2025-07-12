@@ -188,6 +188,16 @@ class IncrementalIndexer:
                 del self.file_metadata[file_path]
                 print(f"Removed metadata for deleted file: {file_path}")
     
+    def clear_metadata(self):
+        """
+        Clear all file metadata.
+        
+        This is useful for force reindexing operations where we want to treat
+        all files as new and rebuild the metadata from scratch.
+        """
+        self.file_metadata.clear()
+        print("Cleared all file metadata")
+    
     def get_stats(self) -> Dict[str, Any]:
         """
         Get statistics about the current metadata.
