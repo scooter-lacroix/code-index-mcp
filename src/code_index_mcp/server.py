@@ -48,6 +48,17 @@ memory_aware_manager = None
 # Global performance monitor - will be initialized when project is set
 performance_monitor = None
 
+def ensure_performance_monitor():
+    """Ensure performance monitor is initialized, creating a default one if needed."""
+    global performance_monitor
+    if performance_monitor is None:
+        try:
+            performance_monitor = PerformanceMonitor()
+            print("Initialized default performance monitor")
+        except Exception as e:
+            print(f"Warning: Could not initialize performance monitor: {e}")
+    return performance_monitor
+
 supported_extensions = [
     '.py', '.js', '.ts', '.jsx', '.tsx', '.java', '.c', '.cpp', '.h', '.hpp',
     '.cs', '.go', '.rb', '.php', '.swift', '.kt', '.rs', '.scala', '.sh',
@@ -442,6 +453,10 @@ async def search_code_advanced(
         return {"error": "Project path not set. Please use set_project_path first."}
 
     settings = ctx.request_context.lifespan_context.settings
+    
+    # Ensure performance monitor is initialized
+    ensure_performance_monitor()
+
     # Use global lazy_content_manager for now
     global lazy_content_manager
     
