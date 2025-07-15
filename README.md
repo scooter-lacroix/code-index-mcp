@@ -114,90 +114,211 @@ The server supports multiple programming languages and file extensions including
   - NoSQL & modern (.cql, .cypher, .sparql, .gql)
 - Documentation/Config (.md, .mdx, .json, .xml, .yml, .yaml)
 
-## Setup and Integration
+## 📦 Installation & Setup
 
-There are several ways to set up and use Code Index MCP, depending on your needs.
+### Prerequisites
+- Python 3.8+
+- uv (recommended) or pip
 
-### For General Use with Host Applications (Recommended)
+### Method 1: Direct Git Installation (Recommended)
 
-This is the easiest and most common way to use the server. It's designed for users who want to use Code Index MCP within an AI application like Claude Desktop.
+For immediate use with AI applications like LM Studio, Claude Desktop, or VS Code:
 
-1.  **Prerequisite**: Make sure you have Python 3.8+ and [uv](https://github.com/astral-sh/uv) installed.
+```bash
+uvx git+https://github.com/scooter-lacroix/code-index-mcp.git
+```
 
-2.  **Configure the Host App**: Add the following to your host application's MCP configuration file (e.g., `claude_desktop_config.json` for Claude Desktop):
+This automatically installs and runs the MCP server without manual setup.
 
-    ```json
-    {
-      "mcpServers": {
-        "code-index": {
-          "command": "uvx",
-          "args": [
-            "code-index-mcp"
-          ]
-        }
+### Method 2: Package Installation
+
+Install from package manager:
+
+```bash
+# Using uv
+uvx code-index-mcp
+
+# Using pip
+pip install code-index-mcp
+```
+
+### Method 3: Local Development Installation
+
+For development, customization, or contributing:
+
+#### Using uv (Recommended)
+
+```bash
+git clone https://github.com/scooter-lacroix/code-index-mcp.git
+cd code-index-mcp
+uv sync
+```
+
+#### Using pip
+
+```bash
+git clone https://github.com/scooter-lacroix/code-index-mcp.git
+cd code-index-mcp
+python -m venv .venv
+source .venv/bin/activate  # Linux/Mac
+# .venv\Scripts\activate  # Windows
+pip install -e .
+```
+
+## 🔌 MCP Integration
+
+The Code Index MCP server supports multiple integration methods:
+
+### Method 1: Direct Git Integration (Recommended)
+
+For LM Studio, Claude Desktop, VS Code, and other MCP-compatible applications:
+
+```json
+{
+  "mcpServers": {
+    "code-index": {
+      "command": "uvx",
+      "args": ["git+https://github.com/scooter-lacroix/code-index-mcp.git"],
+      "env": {},
+      "start_on_launch": true
+    }
+  }
+}
+```
+
+### Method 2: Package Installation
+
+For package manager installed versions:
+
+```json
+{
+  "mcpServers": {
+    "code-index": {
+      "command": "code-index-mcp",
+      "args": [],
+      "env": {},
+      "start_on_launch": true
+    }
+  }
+}
+```
+
+### Method 3: Local Development
+
+For locally installed versions:
+
+```json
+{
+  "mcpServers": {
+    "code-index": {
+      "command": "uv",
+      "args": ["run", "code_index_mcp"],
+      "env": {},
+      "start_on_launch": true
+    }
+  }
+}
+```
+
+### Method 4: HTTP Server Mode
+
+For web-based integrations:
+
+```bash
+# Start HTTP server
+python -m code_index.server --port 8765
+
+# Or using uv
+uv run code_index.server --port 8765
+```
+
+Then configure your application:
+
+```json
+{
+  "mcpServers": {
+    "code-index": {
+      "transport": "http",
+      "url": "http://localhost:8765/mcp",
+      "headers": {
+        "Authorization": "Bearer your-token-here"
       }
     }
-    ```
+  }
+}
+```
 
-3.  **Restart the Host App**: After adding the configuration, restart the application. The `uvx` command will automatically handle the installation and execution of the `code-index-mcp` server in the background.
+### Application-Specific Configurations
 
-### For Local Development
+**VS Code/Cursor/Windsurf** (using MCP extension):
+```json
+{
+  "mcp.servers": {
+    "code-index": {
+      "command": "code-index-mcp",
+      "args": [],
+      "env": {},
+      "transport": "stdio"
+    }
+  }
+}
+```
 
-If you want to contribute to the development of this project, follow these steps:
+**Jan AI**:
+```json
+{
+  "mcp_servers": {
+    "code-index": {
+      "command": "code-index-mcp",
+      "args": [],
+      "env": {}
+    }
+  }
+}
+```
 
-1.  **Clone the repository**:
-    ```bash
-    git clone https://github.com/johnhuang316/code-index-mcp.git
-    cd code-index-mcp
-    ```
-
-2.  **Install dependencies** using `uv`:
-    ```bash
-    uv sync
-    ```
-
-3.  **Configure Your Host App for Local Development**: To make your host application (e.g., Claude Desktop) use your local source code, update its configuration file to execute the server via `uv run`. This ensures any changes you make to the code are reflected immediately when the host app starts the server.
-
-    ```json
-    {
-      "mcpServers": {
-        "code-index": {
-          "command": "uv",
-          "args": [
-            "run",
-            "code_index_mcp"
-          ]
-        }
+**OpenHands**:
+```json
+{
+  "mcp": {
+    "servers": {
+      "code-index": {
+        "command": "code-index-mcp",
+        "args": [],
+        "env": {}
       }
     }
-    ```
+  }
+}
+```
 
-4.  **Debug with the MCP Inspector**: To debug your local server, you also need to tell the inspector to use `uv run`.
-    ```bash
-    npx @modelcontextprotocol/inspector uv run code_index_mcp
-    ```
+## 🛠️ Usage
 
-### Manual Installation via pip (Alternative)
+### Command Line Interface
 
-If you prefer to manage your Python packages manually with `pip`, you can install the server directly.
+```bash
+# Start stdio server (MCP integration)
+code-index-mcp
 
-1.  **Install the package**:
-    ```bash
-    pip install code-index-mcp
-    ```
+# Start HTTP server (web integration)
+code-index-mcp --http --port 8765
 
-2.  **Configure the Host App**: You will need to manually update your host application's MCP configuration to point to the installed script. Replace `"command": "uvx"` with `"command": "code-index-mcp"`.
+# Local development
+uv run code_index_mcp
+```
 
-    ```json
-    {
-      "mcpServers": {
-        "code-index": {
-          "command": "code-index-mcp",
-          "args": []
-        }
-      }
-    }
-    ```
+### Debug with MCP Inspector
+
+```bash
+# For git installation
+npx @modelcontextprotocol/inspector uvx git+https://github.com/scooter-lacroix/code-index-mcp.git
+
+# For package installation
+npx @modelcontextprotocol/inspector code-index-mcp
+
+# For local development
+npx @modelcontextprotocol/inspector uv run code_index_mcp
+```
 
 ## Available Tools
 
