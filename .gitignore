@@ -43,3 +43,6 @@ test_*.py
 
 # Claude Code generated files
 CLAUDE.md
+
+# Roo specific files
+/.roo/

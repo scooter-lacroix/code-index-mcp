@@ -33,6 +33,7 @@ from .progress_tracker import (
     progress_manager, ProgressContext, ProgressTracker, CancellationToken,
     ProgressEventType, OperationStatus, LoggingProgressHandler
 )
+from .file_change_tracker import FileChangeTracker # Import FileChangeTracker
 
 # Create the MCP server
 mcp = FastMCP("CodeIndexer", dependencies=["pathlib"])
@@ -90,6 +91,7 @@ class CodeIndexerContext:
     base_path: str
     settings: OptimizedProjectSettings
     file_count: int = 0
+    file_change_tracker: Optional[FileChangeTracker] = None # Add file_change_tracker
 
 @asynccontextmanager
 async def indexer_lifespan(server: FastMCP) -> AsyncIterator[CodeIndexerContext]:
@@ -102,10 +104,16 @@ async def indexer_lifespan(server: FastMCP) -> AsyncIterator[CodeIndexerContext]
     # Initialize settings manager with skip_load=True to skip loading files
     settings = OptimizedProjectSettings(base_path, skip_load=True, storage_backend='sqlite', use_trie_index=True)
 
+    # Initialize FileChangeTracker
+    # Initialize IncrementalIndexer
+    incremental_indexer = IncrementalIndexer(settings)
+    file_change_tracker = FileChangeTracker(settings.metadata_storage, incremental_indexer)
+
     # Initialize context
     context = CodeIndexerContext(
         base_path=base_path,
-        settings=settings
+        settings=settings,
+        file_change_tracker=file_change_tracker # Pass file_change_tracker to context
     )
 
     try:
@@ -1013,6 +1021,385 @@ async def force_reindex(ctx: Context, clear_cache: bool = True) -> Dict[str, Any
             "error": f"Error during force re-indexing: {e}",
             "success": False
         }
+
+@mcp.tool()
+async def write_to_file(path: str, content: str, line_count: int, ctx: Context) -> Dict[str, Any]:
+    """
+    Write content to a file. If the file exists, it will be overwritten. If it doesn't exist, it will be created.
+    This tool will automatically create any directories needed to write the file.
+    """
+    base_path = ctx.request_context.lifespan_context.base_path
+    file_change_tracker = ctx.request_context.lifespan_context.file_change_tracker
+
+    if not base_path:
+        return {"error": "Project path not set. Please use set_project_path to set a project directory first."}
+
+    full_path = os.path.join(base_path, path)
+    
+    # Capture pre-edit state
+    old_content = file_change_tracker._capture_pre_edit_state(full_path)
+
+    try:
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+
+        with open(full_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        
+        # Record post-edit state
+        file_change_tracker._record_post_edit_state(full_path, old_content, content)
+
+        return {"success": True, "message": f"File '{path}' written successfully."}
+    except Exception as e:
+        return {"success": False, "error": f"Error writing to file '{path}': {e}"}
+
+@mcp.tool()
+async def apply_diff(args: List[Dict[str, Any]], ctx: Context) -> Dict[str, Any]:
+    """
+    Apply targeted modifications to one or more files by searching for specific sections of content and replacing them.
+    This tool supports both single-file and multi-file operations.
+    """
+    base_path = ctx.request_context.lifespan_context.base_path
+    file_change_tracker = ctx.request_context.lifespan_context.file_change_tracker
+
+    if not base_path:
+        return {"error": "Project path not set. Please use set_project_path to set a project directory first."}
+
+    results = []
+    for file_arg in args:
+        file_path = file_arg.get('path')
+        diffs = file_arg.get('diff')
+
+        if not file_path or not diffs:
+            results.append({"path": file_path, "success": False, "error": "Invalid arguments: 'path' and 'diff' are required."})
+            continue
+
+        full_path = os.path.join(base_path, file_path)
+
+        if not os.path.exists(full_path):
+            results.append({"path": file_path, "success": False, "error": f"File not found: {file_path}"})
+            continue
+
+        try:
+            with open(full_path, 'r', encoding='utf-8') as f:
+                original_content = f.read()
+            
+            # Capture pre-edit state
+            old_content = file_change_tracker._capture_pre_edit_state(full_path)
+
+            modified_content = original_content
+            
+            for diff_block in diffs:
+                content_block = diff_block.get('content')
+                start_line = diff_block.get('start_line')
+
+                if not content_block or start_line is None:
+                    results.append({"path": file_path, "success": False, "error": "Invalid diff block: 'content' and 'start_line' are required."})
+                    continue
+
+                # Parse the diff block
+                parts = content_block.split('=======')
+                if len(parts) != 2:
+                    results.append({"path": file_path, "success": False, "error": "Invalid diff format. Must contain exactly one '=======' separator."})
+                    continue
+                
+                search_block_raw = parts[0].replace('<<<<<<< SEARCH\n', '').strip()
+                replace_block_raw = parts[1].replace('>>>>>>> REPLACE', '').strip()
+
+                # Reconstruct the original lines to find the exact match
+                original_lines = modified_content.splitlines()
+                
+                # Adjust start_line to be 0-indexed for list slicing
+                start_idx = start_line - 1
+                
+                # Determine the end index of the search block
+                search_block_lines = search_block_raw.splitlines()
+                end_idx = start_idx + len(search_block_lines)
+
+                # Extract the actual content to be searched from the file based on line numbers
+                content_to_search = "\n".join(original_lines[start_idx:end_idx])
+
+                # Perform the replacement
+                if content_to_search == search_block_raw:
+                    # Replace the lines in the list
+                    new_lines = original_lines[:start_idx] + replace_block_raw.splitlines() + original_lines[end_idx:]
+                    modified_content = "\n".join(new_lines)
+                else:
+                    results.append({"path": file_path, "success": False, "error": f"Search block mismatch for file '{file_path}' at line {start_line}. Expected:\n---\n{search_block_raw}\n---\nFound:\n---\n{content_to_search}\n---"})
+                    continue # Continue to next diff block for this file
+
+            with open(full_path, 'w', encoding='utf-8') as f:
+                f.write(modified_content)
+            
+            # Record post-edit state
+            file_change_tracker._record_post_edit_state(full_path, old_content, modified_content)
+
+            results.append({"path": file_path, "success": True, "message": f"File '{file_path}' modified successfully."})
+
+        except Exception as e:
+            results.append({"path": file_path, "success": False, "error": f"Error applying diff to file '{file_path}': {e}"})
+    
+    return {"results": results}
+
+@mcp.tool()
+async def insert_content(path: str, line: int, content: str, ctx: Context) -> Dict[str, Any]:
+    """
+    Insert new lines of content into a file without modifying existing content.
+    Specify the line number to insert before, or use line 0 to append to the end.
+    """
+    base_path = ctx.request_context.lifespan_context.base_path
+    file_change_tracker = ctx.request_context.lifespan_context.file_change_tracker
+
+    if not base_path:
+        return {"error": "Project path not set. Please use set_project_path to set a project directory first."}
+
+    full_path = os.path.join(base_path, path)
+
+    if not os.path.exists(full_path):
+        return {"success": False, "error": f"File not found: {path}"}
+
+    try:
+        with open(full_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+        
+        # Capture pre-edit state
+        old_content = file_change_tracker._capture_pre_edit_state(full_path)
+
+        # Adjust line number for 0-indexed list
+        insert_idx = line - 1 if line > 0 else len(lines)
+
+        # Insert content
+        new_lines = content.splitlines(keepends=True)
+        modified_lines = lines[:insert_idx] + new_lines + lines[insert_idx:]
+
+        modified_content = "".join(modified_lines)
+
+        with open(full_path, 'w', encoding='utf-8') as f:
+            f.write(modified_content)
+        
+        # Record post-edit state
+        file_change_tracker._record_post_edit_state(full_path, old_content, modified_content)
+
+        return {"success": True, "message": f"Content inserted into '{path}' at line {line}."}
+    except Exception as e:
+        return {"success": False, "error": f"Error inserting content into file '{path}': {e}"}
+
+@mcp.tool()
+async def search_and_replace(path: str, search: str, replace: str, ctx: Context,
+                             start_line: Optional[int] = None, end_line: Optional[int] = None,
+                             use_regex: bool = False, ignore_case: bool = False) -> Dict[str, Any]:
+    """
+    Find and replace specific text strings or patterns (using regex) within a file.
+    """
+    base_path = ctx.request_context.lifespan_context.base_path
+    file_change_tracker = ctx.request_context.lifespan_context.file_change_tracker
+    settings = ctx.request_context.lifespan_context.settings
+    
+    if not base_path:
+        return {"error": "Project path not set. Please use set_project_path to set a project directory first."}
+
+    full_path = os.path.join(base_path, path)
+
+    if not os.path.exists(full_path):
+        return {"success": False, "error": f"File not found: {path}"}
+
+    try:
+        with open(full_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+        
+        # Capture pre-edit state
+        old_content = file_change_tracker._capture_pre_edit_state(full_path)
+
+        modified_lines = []
+        replacements_made = 0
+        
+        import re
+        flags = 0
+        if ignore_case:
+            flags |= re.IGNORECASE
+
+        for i, line_content in enumerate(lines):
+            line_num = i + 1
+            if (start_line is None or line_num >= start_line) and \
+               (end_line is None or line_num <= end_line):
+                if use_regex:
+                    new_line_content, count = re.subn(search, replace, line_content, flags=flags)
+                else:
+                    new_line_content = line_content.replace(search, replace)
+                    count = (len(line_content) - len(new_line_content)) // max(1, len(search)) # Simple count for non-regex
+                
+                replacements_made += count
+                modified_lines.append(new_line_content)
+            else:
+                modified_lines.append(line_content)
+
+        modified_content = "".join(modified_lines)
+
+        with open(full_path, 'w', encoding='utf-8') as f:
+            f.write(modified_content)
+        
+        # Record post-edit state
+        file_change_tracker._record_post_edit_state(full_path, old_content, modified_content, operation_type="search_replace")
+
+        # Update incremental indexer
+        indexer = IncrementalIndexer(settings)
+        indexer.update_file_metadata(path, full_path)
+        indexer.save_metadata()
+
+        return {"success": True, "message": f"Replaced {replacements_made} occurrences in '{path}'."}
+    except Exception as e:
+        return {"success": False, "error": f"Error performing search and replace in '{path}': {e}"}
+
+@mcp.tool()
+def delete_file(file_path: str, ctx: Context) -> Dict[str, Any]:
+    """
+    A tool to delete a specified file.
+    """
+    base_path = ctx.request_context.lifespan_context.base_path
+    file_change_tracker = ctx.request_context.lifespan_context.file_change_tracker
+    settings = ctx.request_context.lifespan_context.settings
+
+    if not base_path:
+        return {"error": "Project path not set. Please use set_project_path to set a project directory first."}
+
+    full_path = os.path.join(base_path, file_path)
+
+    if not os.path.exists(full_path):
+        return {"success": False, "error": f"File not found: {file_path}"}
+
+    try:
+        # Capture pre-edit state
+        old_content = file_change_tracker._capture_pre_edit_state(full_path)
+
+        # Perform file deletion
+        os.remove(full_path)
+
+        # Record post-edit state (new_content is empty for deletion)
+        file_change_tracker._record_post_edit_state(full_path, old_content, "", operation_type="delete")
+
+        # Update the incremental indexer
+        indexer = IncrementalIndexer(settings)
+        indexer.remove_file_metadata(file_path)
+        indexer.save_metadata()
+        
+        # Remove from in-memory file_index
+        global file_index
+        _remove_file_from_index(file_index, file_path)
+        ctx.request_context.lifespan_context.file_count = _count_files(file_index)
+        ctx.request_context.lifespan_context.settings.save_index(file_index)
+
+        return {"success": True, "message": f"File '{file_path}' deleted successfully."}
+    except Exception as e:
+        return {"success": False, "error": f"Error deleting file '{file_path}': {e}"}
+
+@mcp.tool()
+def rename_file(old_file_path: str, new_file_path: str, ctx: Context) -> Dict[str, Any]:
+    """
+    A tool to rename/move a file.
+    """
+    base_path = ctx.request_context.lifespan_context.base_path
+    file_change_tracker = ctx.request_context.lifespan_context.file_change_tracker
+    settings = ctx.request_context.lifespan_context.settings
+
+    if not base_path:
+        return {"error": "Project path not set. Please use set_project_path to set a project directory first."}
+
+    full_old_path = os.path.join(base_path, old_file_path)
+    full_new_path = os.path.join(base_path, new_file_path)
+
+    if not os.path.exists(full_old_path):
+        return {"success": False, "error": f"Old file not found: {old_file_path}"}
+    
+    if os.path.exists(full_new_path):
+        return {"success": False, "error": f"New file already exists: {new_file_path}"}
+
+    try:
+        # Capture pre-edit state of the old file
+        old_content = file_change_tracker._capture_pre_edit_state(full_old_path)
+
+        # Ensure new directory exists
+        os.makedirs(os.path.dirname(full_new_path), exist_ok=True)
+
+        # Perform the rename/move
+        os.rename(full_old_path, full_new_path)
+
+        # Record post-edit state for the rename operation
+        # We pass old_file_path as the primary identifier for tracking,
+        # and new_file_path as an additional detail.
+        # The content is the same, but the path changes.
+        file_change_tracker._record_post_edit_state(
+            old_file_path,
+            old_content,
+            old_content, # Content remains the same for rename
+            operation_type="rename",
+            new_file_path=new_file_path
+        )
+
+        # Update the incremental indexer
+        indexer = IncrementalIndexer(settings)
+        indexer.rename_file_metadata(old_file_path, new_file_path, full_new_path)
+        indexer.save_metadata()
+        
+        # Update in-memory file_index
+        global file_index
+        _remove_file_from_index(file_index, old_file_path)
+        _add_file_to_index(file_index, new_file_path)
+        ctx.request_context.lifespan_context.file_count = _count_files(file_index)
+        ctx.request_context.lifespan_context.settings.save_index(file_index)
+
+        return {"success": True, "message": f"File '{old_file_path}' renamed to '{new_file_path}' successfully."}
+    except Exception as e:
+        return {"success": False, "error": f"Error renaming file '{old_file_path}' to '{new_file_path}': {e}"}
+
+@mcp.tool()
+async def revert_file_to_version(file_path: str, ctx: Context, version_id: Optional[str] = None, timestamp: Optional[str] = None) -> Dict[str, Any]:
+    """
+    A tool to revert a file to a previous version.
+    """
+    base_path = ctx.request_context.lifespan_context.base_path
+    file_change_tracker = ctx.request_context.lifespan_context.file_change_tracker
+    settings = ctx.request_context.lifespan_context.settings
+
+    if not base_path:
+        return {"error": "Project path not set. Please use set_project_path to set a project directory first."}
+
+    full_path = os.path.join(base_path, file_path)
+
+    if not os.path.exists(full_path):
+        return {"success": False, "error": f"File not found: {file_path}"}
+    
+    if not version_id and not timestamp:
+        return {"success": False, "error": "Either 'version_id' or 'timestamp' must be provided to revert."}
+
+    try:
+        # Capture the current state of the file before reverting
+        current_content = file_change_tracker._capture_pre_edit_state(full_path)
+
+        # Reconstruct the desired historical version
+        reconstructed_content = file_change_tracker.reconstruct_file_version(
+            file_path,
+            version_id=version_id,
+            timestamp=timestamp
+        )
+
+        if reconstructed_content is None:
+            return {"success": False, "error": f"Could not reconstruct version for '{file_path}' with version_id '{version_id}' or timestamp '{timestamp}'. Version might not exist or reconstruction failed."}
+
+        # Overwrite the current file content with the reconstructed content
+        with open(full_path, 'w', encoding='utf-8') as f:
+            f.write(reconstructed_content)
+        
+        # Record the post-edit state for the revert operation
+        file_change_tracker._record_post_edit_state(full_path, current_content, reconstructed_content, operation_type="revert")
+
+        # Update the incremental indexer
+        indexer = IncrementalIndexer(settings)
+        indexer.update_file_metadata(file_path, full_path)
+        indexer.save_metadata()
+
+        return {"success": True, "message": f"File '{file_path}' reverted to specified version successfully."}
+    except Exception as e:
+        return {"success": False, "error": f"Error reverting file '{file_path}': {e}"}
 
 @mcp.tool()
 def get_settings_info(ctx: Context) -> Dict[str, Any]:
@@ -2456,6 +2843,42 @@ def _get_all_files(directory, prefix: str = "") -> List[Tuple[str, Dict]]:
             # Handle nested directory structure without explicit type
             all_files.extend(_get_all_files(item, current_path))
     return all_files
+
+def _remove_file_from_index(directory: Dict, file_path: str):
+    """Recursively remove a file from the in-memory file_index."""
+    parts = file_path.replace('\\', '/').split('/')
+    current_dir = directory
+    for i, part in enumerate(parts):
+        if i == len(parts) - 1: # Last part is the file name
+            if part in current_dir and current_dir[part].get('type') == 'file':
+                del current_dir[part]
+                return True
+            return False
+        else: # Directory part
+            if part in current_dir and isinstance(current_dir[part], dict):
+                current_dir = current_dir[part]
+            else:
+                return False # Path not found
+    return False
+
+def _add_file_to_index(directory: Dict, file_path: str):
+    """Recursively add a file to the in-memory file_index."""
+    parts = file_path.replace('\\', '/').split('/')
+    current_dir = directory
+    for i, part in enumerate(parts):
+        if i == len(parts) - 1: # Last part is the file name
+            _, ext = os.path.splitext(file_path)
+            current_dir[part] = {
+                "type": "file",
+                "path": file_path,
+                "ext": ext
+            }
+            return True
+        else: # Directory part
+            if part not in current_dir:
+                current_dir[part] = {}
+            current_dir = current_dir[part]
+    return False
 
 def main():
     """Main function to run the MCP server."""

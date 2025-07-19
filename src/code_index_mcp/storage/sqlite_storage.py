@@ -93,6 +93,35 @@ class SQLiteStorage(StorageInterface):
                     END
                 ''')
             
+            # Create file_versions table
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS file_versions (
+                    version_id TEXT PRIMARY KEY,
+                    file_path TEXT NOT NULL,
+                    content BLOB NOT NULL,
+                    hash TEXT NOT NULL,
+                    timestamp TEXT NOT NULL,
+                    size INTEGER NOT NULL
+                )
+            ''')
+
+            # Create file_diffs table
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS file_diffs (
+                    diff_id TEXT PRIMARY KEY,
+                    file_path TEXT NOT NULL,
+                    previous_version_id TEXT,
+                    current_version_id TEXT NOT NULL,
+                    diff_content BLOB NOT NULL,
+                    diff_type TEXT NOT NULL,
+                    operation_type TEXT NOT NULL,
+                    operation_details TEXT,
+                    timestamp TEXT NOT NULL,
+                    FOREIGN KEY (previous_version_id) REFERENCES file_versions(version_id),
+                    FOREIGN KEY (current_version_id) REFERENCES file_versions(version_id)
+                )
+            ''')
+
             conn.commit()
     
     def put(self, key: str, value: Any) -> bool:
@@ -235,6 +264,82 @@ class SQLiteStorage(StorageInterface):
         """Close the storage backend."""
         # SQLite connections are managed per-operation, so no persistent connection to close
         pass
+
+    def insert_file_version(self, version_id: str, file_path: str, content: str, hash: str, timestamp: str, size: int) -> bool:
+        """Inserts a new file version into the file_versions table."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute('''
+                    INSERT INTO file_versions (version_id, file_path, content, hash, timestamp, size)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ''', (version_id, file_path, content.encode('utf-8'), hash, timestamp, size))
+                conn.commit()
+                return True
+        except Exception as e:
+            print(f"Error inserting file version {version_id} for {file_path}: {e}")
+            return False
+
+    def insert_file_diff(self, diff_id: str, file_path: str, previous_version_id: Optional[str], current_version_id: str, diff_content: str, diff_type: str, operation_type: str, operation_details: Optional[str], timestamp: str) -> bool:
+        """Inserts a new file diff into the file_diffs table."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute('''
+                    INSERT INTO file_diffs (diff_id, file_path, previous_version_id, current_version_id, diff_content, diff_type, operation_type, operation_details, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (diff_id, file_path, previous_version_id, current_version_id, diff_content.encode('utf-8'), diff_type, operation_type, operation_details, timestamp))
+                conn.commit()
+                return True
+        except Exception as e:
+            print(f"Error inserting file diff {diff_id} for {file_path}: {e}")
+            return False
+
+    def get_file_version(self, version_id: str) -> Optional[Dict]:
+        """Retrieves a file version by its ID."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.execute('SELECT * FROM file_versions WHERE version_id = ?', (version_id,))
+                row = cursor.fetchone()
+                if row:
+                    version_data = dict(row)
+                    version_data['content'] = version_data['content'].decode('utf-8')
+                    return version_data
+                return None
+        except Exception as e:
+            print(f"Error retrieving file version {version_id}: {e}")
+            return None
+
+    def get_file_diffs_for_path(self, file_path: str) -> List[Dict]:
+        """Retrieves all diffs for a given file path."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.execute('SELECT * FROM file_diffs WHERE file_path = ? ORDER BY timestamp ASC', (file_path,))
+                diffs = []
+                for row in cursor.fetchall():
+                    diff_data = dict(row)
+                    diff_data['diff_content'] = diff_data['diff_content'].decode('utf-8')
+                    diffs.append(diff_data)
+                return diffs
+        except Exception as e:
+            print(f"Error retrieving file diffs for {file_path}: {e}")
+            return []
+
+    def get_file_versions_for_path(self, file_path: str) -> List[Dict]:
+        """Retrieves all versions for a given file path, ordered by timestamp."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.execute('SELECT * FROM file_versions WHERE file_path = ? ORDER BY timestamp ASC', (file_path,))
+                versions = []
+                for row in cursor.fetchall():
+                    version_data = dict(row)
+                    version_data['content'] = version_data['content'].decode('utf-8')
+                    versions.append(version_data)
+                return versions
+        except Exception as e:
+            print(f"Error retrieving file versions for {file_path}: {e}")
+            return []
     
     def flush(self) -> bool:
         """Flush any pending operations."""
